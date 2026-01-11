@@ -88,6 +88,30 @@ Edit `config.json` to set your API settings:
 
 ## Usage
 
+### Option 1: Web UI (Recommended for Configuration)
+
+The web UI provides a visual interface to tweak OCR settings with live preview:
+
+```bash
+uv run python server.py
+```
+
+Then open your browser to: `http://localhost:8000`
+
+**Features:**
+- **Live Preview**: See detection boxes (red) and merged boxes (blue) update in real-time
+- **Visual Sliders**: Adjust all settings with immediate visual feedback
+- **Mini Visualizers**: See how min width/height and merge tolerances affect detection
+- **Non-destructive Overlays**: Boxes are drawn as HTML overlays, not on the image
+
+**Workflow:**
+1. Click "New Screenshot" to capture the active window
+2. Click "Run Detection" to detect text regions (red boxes appear)
+3. Adjust merge settings (vertical/horizontal tolerance, width ratio) - blue boxes update live
+4. Click "EXTRACT TEXT" to get the final OCR result
+
+### Option 2: Command Line (Hotkey Mode)
+
 Run the application:
 
 ```bash

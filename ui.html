@@ -1,0 +1,873 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCR Configurator</title>
+    <style>
+        :root {
+            --bg-color: #1e1e1e;
+            --panel-bg: #252526;
+            --text-color: #d4d4d4;
+            --accent: #007acc;
+            --border: #3e3e42;
+            --box-raw: rgba(255, 0, 0, 0.3);
+            --box-raw-border: #ff0000;
+            --box-merged: rgba(0, 100, 255, 0.2);
+            --box-merged-border: #0088ff;
+            --box-tolerance: rgba(255, 255, 0, 0.15);
+            --box-tolerance-border: #ffff00;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* Left Sidebar */
+        .sidebar {
+            width: 380px;
+            background-color: var(--panel-bg);
+            border-right: 1px solid var(--border);
+            padding: 20px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .section {
+            background: #2d2d30;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        h2 { 
+            margin: 0 0 10px 0; 
+            color: #fff; 
+            font-size: 18px; 
+        }
+
+        h3 { 
+            margin: 0 0 15px 0; 
+            color: #fff; 
+            font-size: 13px; 
+            text-transform: uppercase; 
+            letter-spacing: 1px; 
+            font-weight: 600;
+        }
+        
+        label { 
+            display: block; 
+            margin-bottom: 8px; 
+            font-size: 12px; 
+            color: #ccc;
+        }
+        
+        input[type="range"] { 
+            width: 100%; 
+            margin-bottom: 8px; 
+            cursor: pointer;
+        }
+
+        input[type="text"], 
+        input[type="password"], 
+        input[type="number"] {
+            width: 100%; 
+            box-sizing: border-box; 
+            background: #3c3c3c; 
+            border: 1px solid #555; 
+            color: white; 
+            padding: 8px; 
+            margin-bottom: 10px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 5px;
+            font-weight: 600;
+            font-size: 13px;
+            transition: filter 0.2s;
+        }
+        button:hover { 
+            filter: brightness(1.15); 
+        }
+        button:active {
+            filter: brightness(0.9);
+        }
+        button.secondary { 
+            background: #444; 
+        }
+        button.success {
+            background: #2d8a56;
+        }
+        button.warning {
+            background: #d17821;
+            font-size: 16px;
+            padding: 15px;
+        }
+
+        /* Mini Visualizers */
+        .mini-viz-container {
+            height: 120px;
+            background: #000;
+            border: 1px dashed #555;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 15px;
+            position: relative;
+            overflow: hidden;
+            border-radius: 4px;
+        }
+
+        /* Visualizer 1: Paddle Settings */
+        #viz-paddle-box {
+            border: 2px solid red;
+            background: rgba(255,0,0,0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: red;
+            font-weight: bold;
+            font-size: 24px;
+            transition: all 0.2s ease;
+            min-width: 20px;
+            min-height: 20px;
+        }
+
+        /* Visualizer 2: Merge Settings */
+        #viz-merge-center {
+            width: 50px; 
+            height: 25px;
+            background: rgba(255, 255, 0, 0.3);
+            border: 1px solid yellow;
+            position: absolute;
+            z-index: 2;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+        }
+        #viz-merge-zone {
+            position: absolute;
+            border: 1px dashed yellow;
+            background: rgba(255, 255, 0, 0.1);
+            z-index: 1;
+            transition: all 0.15s ease;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        /* Right Panel: Main Preview */
+        .preview-area {
+            flex: 1;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            background: #1e1e1e;
+        }
+
+        #image-container {
+            flex: 1;
+            background: #111;
+            border: 1px solid var(--border);
+            position: relative;
+            overflow: auto;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 0;
+            padding: 20px;
+        }
+
+        #image-wrapper {
+            position: relative;
+            display: inline-block;
+        }
+
+        #preview-img {
+            max-width: 100%;
+            height: auto;
+            display: block;
+        }
+
+        /* Overlay System */
+        .overlay-layer {
+            position: absolute;
+            top: 0; 
+            left: 0;
+            pointer-events: none; /* Click through to image */
+        }
+
+        .box {
+            position: absolute;
+            box-sizing: border-box;
+            display: flex;
+            align-items: flex-start;
+            justify-content: flex-start;
+        }
+        
+        .box-raw {
+            border: 2px solid var(--box-raw-border);
+            background: var(--box-raw);
+        }
+
+        .box-merged {
+            border: 2px solid var(--box-merged-border);
+            background: var(--box-merged);
+            z-index: 10;
+        }
+
+        .box-tolerance {
+            border: 1px dashed var(--box-tolerance-border);
+            background: var(--box-tolerance);
+            z-index: 5;
+            pointer-events: none;
+        }
+        
+        .box-label {
+            background: var(--box-merged-border);
+            color: white;
+            font-size: 10px;
+            padding: 2px 6px;
+            border-radius: 2px;
+            margin: 2px;
+            font-weight: bold;
+        }
+
+        #output-text {
+            height: 150px;
+            background: #111;
+            border: 1px solid var(--border);
+            color: #eee;
+            padding: 12px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 12px;
+            line-height: 1.5;
+            border-radius: 4px;
+        }
+        
+        .value-display { 
+            float: right; 
+            color: #aaa; 
+            font-weight: 600;
+        }
+
+        .info-text {
+            font-size: 10px; 
+            color: #888; 
+            margin-top: 5px;
+            font-style: italic;
+        }
+
+        .slider-container {
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="sidebar">
+    <h2>📸 Screenshot OCR</h2>
+    
+    <!-- API Settings -->
+    <div class="section">
+        <h3>API Config</h3>
+        <label>API URL</label>
+        <input type="text" id="api_url" placeholder="http://localhost:1234/v1">
+        <label>API Key</label>
+        <input type="password" id="api_key" placeholder="lm-studio">
+        <label>Model</label>
+        <input type="text" id="model" placeholder="qwen/qwen3-vl-4b">
+        <button class="secondary" onclick="saveConfig()">💾 Save Config</button>
+    </div>
+
+    <!-- Paddle Settings -->
+    <div class="section">
+        <h3>1. Detection (PaddleOCR)</h3>
+        
+        <div class="mini-viz-container">
+            <div id="viz-paddle-box">A</div>
+        </div>
+
+        <div class="slider-container">
+            <label>Min Confidence <span id="val_conf" class="value-display">0.6</span></label>
+            <input type="range" id="min_confidence" min="0.1" max="1.0" step="0.05" value="0.6" oninput="updatePaddleViz()">
+            <div class="info-text">Controls detection sensitivity. Lower = more detections (may include noise)</div>
+        </div>
+
+        <div class="slider-container">
+            <label>Min Width (px) <span id="val_width" class="value-display">30</span></label>
+            <input type="range" id="min_width" min="5" max="100" step="1" value="30" oninput="updatePaddleViz()">
+        </div>
+
+        <div class="slider-container">
+            <label>Min Height (px) <span id="val_height" class="value-display">30</span></label>
+            <input type="range" id="min_height" min="5" max="100" step="1" value="30" oninput="updatePaddleViz()">
+        </div>
+        
+        <button onclick="runDetection()">🔍 Run Detection (Step 1)</button>
+        <div class="info-text">* Must run this to see red boxes on the image</div>
+    </div>
+
+    <!-- Merge Settings -->
+    <div class="section">
+        <h3>2. Merging (Live Preview)</h3>
+        
+        <div class="mini-viz-container">
+            <!-- Center Reference -->
+            <div id="viz-merge-center"></div>
+            <!-- Tolerance Zone -->
+            <div id="viz-merge-zone"></div>
+        </div>
+
+        <div class="slider-container">
+            <label>Vertical Tolerance <span id="val_vtol" class="value-display">30</span></label>
+            <input type="range" id="v_tol" min="0" max="200" step="5" value="30" oninput="updateMergeViz()">
+            <div class="info-text">Max vertical gap between boxes to merge (px)</div>
+        </div>
+
+        <div class="slider-container">
+            <label>Horizontal Tolerance <span id="val_htol" class="value-display">50</span></label>
+            <input type="range" id="h_tol" min="0" max="300" step="5" value="50" oninput="updateMergeViz()">
+            <div class="info-text">Max horizontal offset to consider aligned (px)</div>
+        </div>
+
+        <div class="slider-container">
+            <label>Width Ratio Threshold <span id="val_ratio" class="value-display">0.3</span></label>
+            <input type="range" id="w_ratio" min="0" max="1.0" step="0.05" value="0.3" oninput="updateMergeViz()">
+            <div class="info-text">Min width similarity ratio (0.0-1.0) to merge boxes</div>
+        </div>
+        
+        <div class="info-text">* Yellow/Blue boxes update live as you adjust sliders</div>
+    </div>
+
+    <button class="success" onclick="captureScreenshot()">📷 New Screenshot</button>
+    <div class="info-text" style="margin-top: 10px; text-align: center;">
+        💡 Tip: Press <strong>Ctrl+Shift+Alt+Z</strong> anywhere to capture screenshot automatically
+    </div>
+    <button class="warning" onclick="runExtraction()">🚀 EXTRACT TEXT</button>
+</div>
+
+<div class="preview-area">
+    <div id="image-container">
+        <div id="image-wrapper" style="display: none;">
+            <img id="preview-img" src="" alt="Capture or Load Image">
+            <div id="overlay-raw" class="overlay-layer"></div>
+            <div id="overlay-tolerance" class="overlay-layer"></div>
+            <div id="overlay-merged" class="overlay-layer"></div>
+        </div>
+        <div id="placeholder" style="color: #666; padding: 40px; text-align: center;">
+            <div style="font-size: 48px; margin-bottom: 20px;">📸</div>
+            <div>Click "New Screenshot" to capture an image</div>
+        </div>
+    </div>
+    <div id="output-text" placeholder="Extracted text will appear here...">Waiting for extraction...</div>
+</div>
+
+<script>
+    let globalConfig = {};
+    let rawDetections = []; // Stores [x1, y1, x2, y2] from server
+    let imageNaturalWidth = 0;
+    let imageNaturalHeight = 0;
+    let imageDisplayWidth = 0;
+    let imageDisplayHeight = 0;
+    let scaleX = 1;
+    let scaleY = 1;
+    let currentScreenshotVersion = 0;
+    let eventSource = null;
+
+    // --- Initialization ---
+    window.onload = async () => {
+        await loadConfig();
+        updatePaddleViz();
+        updateMergeViz();
+        setupSSEListener();
+    };
+
+    // --- Server-Sent Events for auto-updating screenshot ---
+    function setupSSEListener() {
+        // Close existing connection if any
+        if (eventSource) {
+            eventSource.close();
+        }
+        
+        // Connect to SSE endpoint
+        eventSource = new EventSource('/screenshot/events');
+        
+        eventSource.onmessage = async (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                if (data.version && data.version > currentScreenshotVersion) {
+                    currentScreenshotVersion = data.version;
+                    console.log('New screenshot detected via hotkey, updating preview...');
+                    await loadScreenshot();
+                }
+            } catch (e) {
+                console.error('Error processing SSE event:', e);
+            }
+        };
+        
+        eventSource.onerror = (error) => {
+            console.error('SSE connection error:', error);
+            // Try to reconnect after a delay
+            setTimeout(() => {
+                if (eventSource && eventSource.readyState === EventSource.CLOSED) {
+                    setupSSEListener();
+                }
+            }, 3000);
+        };
+    }
+
+    async function loadScreenshot() {
+        try {
+            const res = await fetch('/screenshot');
+            const data = await res.json();
+            
+            if (data.status === "success") {
+                const img = document.getElementById('preview-img');
+                const wrapper = document.getElementById('image-wrapper');
+                const placeholder = document.getElementById('placeholder');
+                
+                img.src = "data:image/png;base64," + data.image;
+                
+                img.onload = () => {
+                    // Show wrapper, hide placeholder
+                    wrapper.style.display = 'block';
+                    placeholder.style.display = 'none';
+                    
+                    // Get natural and display dimensions
+                    imageNaturalWidth = img.naturalWidth;
+                    imageNaturalHeight = img.naturalHeight;
+                    imageDisplayWidth = img.clientWidth;
+                    imageDisplayHeight = img.clientHeight;
+                    
+                    // Calculate scale factors
+                    scaleX = imageDisplayWidth / imageNaturalWidth;
+                    scaleY = imageDisplayHeight / imageNaturalHeight;
+                    
+                    // Resize overlays to match image display size
+                    const overlayRaw = document.getElementById('overlay-raw');
+                    const overlayTolerance = document.getElementById('overlay-tolerance');
+                    const overlayMerged = document.getElementById('overlay-merged');
+                    
+                    overlayRaw.style.width = imageDisplayWidth + 'px';
+                    overlayRaw.style.height = imageDisplayHeight + 'px';
+                    
+                    overlayTolerance.style.width = imageDisplayWidth + 'px';
+                    overlayTolerance.style.height = imageDisplayHeight + 'px';
+                    
+                    overlayMerged.style.width = imageDisplayWidth + 'px';
+                    overlayMerged.style.height = imageDisplayHeight + 'px';
+                    
+                    // Clear old boxes
+                    rawDetections = [];
+                    overlayRaw.innerHTML = '';
+                    overlayTolerance.innerHTML = '';
+                    overlayMerged.innerHTML = '';
+                    
+                    document.getElementById('output-text').innerText = `✅ Screenshot updated (version ${data.version}). Ready to detect text regions.`;
+                };
+            }
+        } catch (e) {
+            console.error('Error loading screenshot:', e);
+        }
+    }
+
+    async function loadConfig() {
+        try {
+            const res = await fetch('/config');
+            globalConfig = await res.json();
+            
+            // Populate inputs
+            document.getElementById('api_url').value = globalConfig.api_url || '';
+            document.getElementById('api_key').value = globalConfig.api_key || '';
+            document.getElementById('model').value = globalConfig.model || '';
+            
+            const td = globalConfig.text_detection || {};
+            document.getElementById('min_confidence').value = td.min_confidence || 0.6;
+            document.getElementById('min_width').value = td.min_width || 30;
+            document.getElementById('min_height').value = td.min_height || 30;
+            
+            document.getElementById('v_tol').value = td.merge_vertical_tolerance || 30;
+            document.getElementById('h_tol').value = td.merge_horizontal_tolerance || 50;
+            document.getElementById('w_ratio').value = td.merge_width_ratio_threshold || 0.3;
+            
+            // Update visualizers
+            updatePaddleViz();
+            updateMergeViz();
+        } catch (e) {
+            console.error('Error loading config:', e);
+            document.getElementById('output-text').innerText = 'Error loading config: ' + e.message;
+        }
+    }
+
+    async function saveConfig() {
+        const newConfig = { ...globalConfig };
+        newConfig.api_url = document.getElementById('api_url').value;
+        newConfig.api_key = document.getElementById('api_key').value;
+        newConfig.model = document.getElementById('model').value;
+        
+        newConfig.text_detection = newConfig.text_detection || {};
+        newConfig.text_detection.min_confidence = parseFloat(document.getElementById('min_confidence').value);
+        newConfig.text_detection.min_width = parseInt(document.getElementById('min_width').value);
+        newConfig.text_detection.min_height = parseInt(document.getElementById('min_height').value);
+        newConfig.text_detection.merge_vertical_tolerance = parseInt(document.getElementById('v_tol').value);
+        newConfig.text_detection.merge_horizontal_tolerance = parseInt(document.getElementById('h_tol').value);
+        newConfig.text_detection.merge_width_ratio_threshold = parseFloat(document.getElementById('w_ratio').value);
+
+        try {
+            const res = await fetch('/config', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(newConfig)
+            });
+            const data = await res.json();
+            if(data.status === "success") {
+                globalConfig = newConfig;
+                document.getElementById('output-text').innerText = '✅ Config saved successfully!';
+            } else {
+                document.getElementById('output-text').innerText = '❌ Error saving config: ' + data.message;
+            }
+        } catch (e) {
+            document.getElementById('output-text').innerText = '❌ Error saving config: ' + e.message;
+        }
+    }
+
+    // --- Visualizers ---
+
+    function updatePaddleViz() {
+        const conf = parseFloat(document.getElementById('min_confidence').value);
+        const w = parseInt(document.getElementById('min_width').value);
+        const h = parseInt(document.getElementById('min_height').value);
+
+        // Update Labels
+        document.getElementById('val_conf').innerText = conf.toFixed(2);
+        document.getElementById('val_width').innerText = w;
+        document.getElementById('val_height').innerText = h;
+
+        // Update Box Viz
+        const box = document.getElementById('viz-paddle-box');
+        box.style.opacity = conf; // Mapping confidence to opacity
+        box.style.width = Math.max(20, Math.min(100, w)) + 'px';
+        box.style.height = Math.max(20, Math.min(100, h)) + 'px';
+    }
+
+    function updateMergeViz() {
+        const v = parseInt(document.getElementById('v_tol').value);
+        const h = parseInt(document.getElementById('h_tol').value);
+        const r = parseFloat(document.getElementById('w_ratio').value);
+
+        document.getElementById('val_vtol').innerText = v;
+        document.getElementById('val_htol').innerText = h;
+        document.getElementById('val_ratio').innerText = r.toFixed(2);
+
+        // Update Zone Viz
+        // We simulate a box of 50x25 in the middle
+        // The zone shows how far it reaches
+        const baseW = 50; 
+        const baseH = 25;
+        const zone = document.getElementById('viz-merge-zone');
+        
+        // The zone should be the base size + tolerance * 2 (both directions)
+        // Scaled down to fit in the container
+        const scale = 0.4; 
+        
+        zone.style.width = (baseW + (h * 2 * scale)) + 'px';
+        zone.style.height = (baseH + (v * 2 * scale)) + 'px';
+        
+        // Trigger live merge calculation if we have detections
+        if(rawDetections.length > 0) {
+            runLiveMerge();
+        }
+    }
+
+    // --- Main Actions ---
+
+    async function captureScreenshot() {
+        document.getElementById('output-text').innerText = "📸 Capturing screenshot...";
+        try {
+            const res = await fetch('/capture', { method: 'POST' });
+            const data = await res.json();
+            
+            if (data.status === "success") {
+                currentScreenshotVersion = data.version || 0;
+                await loadScreenshot();
+            } else {
+                document.getElementById('output-text').innerText = "❌ Error: " + data.message;
+            }
+        } catch (e) {
+            document.getElementById('output-text').innerText = "❌ Error capturing: " + e.message;
+        }
+    }
+
+    async function runDetection() {
+        // First save config locally to state to send to API
+        const settings = {
+            min_confidence: parseFloat(document.getElementById('min_confidence').value),
+            min_width: parseInt(document.getElementById('min_width').value),
+            min_height: parseInt(document.getElementById('min_height').value)
+        };
+
+        document.getElementById('output-text').innerText = "🔍 Detecting text regions (PaddleOCR)... This may take a few seconds...";
+        
+        try {
+            const res = await fetch('/detect_preview', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ text_detection: settings })
+            });
+            
+            const data = await res.json();
+            
+            if (data.status === "success") {
+                rawDetections = data.regions; // List of [x1, y1, x2, y2]
+                drawRawBoxes();
+                runLiveMerge(); // Immediately run merge on the new data
+                document.getElementById('output-text').innerText = `✅ Detected ${rawDetections.length} regions. Adjust merge settings to group them.`;
+            } else {
+                document.getElementById('output-text').innerText = "❌ Error: " + data.message;
+            }
+        } catch (e) {
+            document.getElementById('output-text').innerText = "❌ Error: " + e.message;
+        }
+    }
+
+    function drawRawBoxes() {
+        const container = document.getElementById('overlay-raw');
+        container.innerHTML = '';
+        
+        rawDetections.forEach((rect, idx) => {
+            const [x1, y1, x2, y2] = rect;
+            const div = document.createElement('div');
+            div.className = 'box box-raw';
+            div.style.left = (x1 * scaleX) + 'px';
+            div.style.top = (y1 * scaleY) + 'px';
+            div.style.width = ((x2 - x1) * scaleX) + 'px';
+            div.style.height = ((y2 - y1) * scaleY) + 'px';
+            container.appendChild(div);
+        });
+    }
+
+    // --- THE JS MERGE LOGIC (Ported from Python) ---
+    
+    function runLiveMerge() {
+        if (!rawDetections || rawDetections.length === 0) return;
+
+        const v_tol = parseInt(document.getElementById('v_tol').value);
+        const h_tol = parseInt(document.getElementById('h_tol').value);
+        const ratio_thresh = parseFloat(document.getElementById('w_ratio').value);
+
+        // Deep copy detections
+        let boxes = JSON.parse(JSON.stringify(rawDetections));
+        let merged = [];
+        let used = new Array(boxes.length).fill(false);
+
+        // Iterate and merge (same algorithm as Python)
+        for (let i = 0; i < boxes.length; i++) {
+            if (used[i]) continue;
+
+            let group = [boxes[i]];
+            used[i] = true;
+            let changed = true;
+
+            while (changed) {
+                changed = false;
+                for (let j = 0; j < boxes.length; j++) {
+                    if (used[j] || j === i) continue;
+                    
+                    let box2 = boxes[j];
+                    let canMerge = false;
+
+                    // Check box2 against every box currently in the group
+                    for (let gBox of group) {
+                        // Unpack coordinates
+                        let [x1_1, y1_1, x2_1, y2_1] = gBox;
+                        let [x1_2, y1_2, x2_2, y2_2] = box2;
+
+                        let w1 = x2_1 - x1_1;
+                        let w2 = x2_2 - x1_2;
+
+                        // Vertical Gap check
+                        let v_gap1 = Math.abs(y2_1 - y1_2);
+                        let v_gap2 = Math.abs(y2_2 - y1_1);
+                        let is_v_adj = (v_gap1 < v_tol || v_gap2 < v_tol);
+
+                        if (!is_v_adj) continue;
+
+                        // Horizontal Alignment check
+                        let x_align = Math.abs(x1_1 - x1_2);
+                        if (x_align > h_tol) continue;
+
+                        // Width Ratio check
+                        if (w1 > 0 && w2 > 0) {
+                            let ratio = Math.min(w1, w2) / Math.max(w1, w2);
+                            if (ratio < ratio_thresh) continue;
+                        }
+
+                        canMerge = true;
+                        break;
+                    }
+
+                    if (canMerge) {
+                        group.push(box2);
+                        used[j] = true;
+                        changed = true;
+                    }
+                }
+            }
+
+            // Create merged bbox from group
+            if (group.length > 0) {
+                let min_x = Math.min(...group.map(b => b[0]));
+                let min_y = Math.min(...group.map(b => b[1]));
+                let max_x = Math.max(...group.map(b => b[2]));
+                let max_y = Math.max(...group.map(b => b[3]));
+                
+                merged.push({
+                    rect: [min_x, min_y, max_x, max_y],
+                    count: group.length,
+                    originalBoxes: group
+                });
+            }
+        }
+
+        drawMergedBoxes(merged);
+    }
+
+    function drawMergedBoxes(mergedList) {
+        const containerMerged = document.getElementById('overlay-merged');
+        const containerTolerance = document.getElementById('overlay-tolerance');
+        containerMerged.innerHTML = '';
+        containerTolerance.innerHTML = '';
+
+        mergedList.forEach((item, idx) => {
+            const [x1, y1, x2, y2] = item.rect;
+            
+            // Draw merged box (blue)
+            const div = document.createElement('div');
+            div.className = 'box box-merged';
+            div.style.left = (x1 * scaleX) + 'px';
+            div.style.top = (y1 * scaleY) + 'px';
+            div.style.width = ((x2 - x1) * scaleX) + 'px';
+            div.style.height = ((y2 - y1) * scaleY) + 'px';
+            
+            // Optional: Label showing it's a merged group
+            if(item.count > 1) {
+                const label = document.createElement('div');
+                label.className = 'box-label';
+                label.innerText = item.count;
+                div.appendChild(label);
+            }
+
+            containerMerged.appendChild(div);
+
+            // Draw tolerance zones (yellow) for merged boxes with multiple original boxes
+            if (item.count > 1 && item.originalBoxes) {
+                const v_tol = parseInt(document.getElementById('v_tol').value);
+                const h_tol = parseInt(document.getElementById('h_tol').value);
+                
+                // Draw tolerance zones around each original box in the group
+                item.originalBoxes.forEach(origBox => {
+                    const [ox1, oy1, ox2, oy2] = origBox;
+                    const tolDiv = document.createElement('div');
+                    tolDiv.className = 'box box-tolerance';
+                    tolDiv.style.left = ((ox1 - h_tol) * scaleX) + 'px';
+                    tolDiv.style.top = ((oy1 - v_tol) * scaleY) + 'px';
+                    tolDiv.style.width = ((ox2 - ox1 + 2 * h_tol) * scaleX) + 'px';
+                    tolDiv.style.height = ((oy2 - oy1 + 2 * v_tol) * scaleY) + 'px';
+                    containerTolerance.appendChild(tolDiv);
+                });
+            }
+        });
+    }
+
+    async function runExtraction() {
+        // Save current config first to ensure python uses what we see
+        await saveConfig();
+        
+        document.getElementById('output-text').innerText = "🚀 Extracting text with AI... (this may take a moment)";
+        
+        try {
+            const res = await fetch('/run_extraction', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({})
+            });
+            
+            const data = await res.json();
+            if (data.status === "success") {
+                document.getElementById('output-text').innerText = data.text || "No text extracted.";
+            } else {
+                document.getElementById('output-text').innerText = "❌ Error: " + data.message;
+            }
+        } catch (e) {
+            document.getElementById('output-text').innerText = "❌ Error: " + e.message;
+        }
+    }
+
+    // Handle window resize to update overlay positions
+    let resizeTimeout;
+    window.addEventListener('resize', () => {
+        clearTimeout(resizeTimeout);
+        resizeTimeout = setTimeout(() => {
+            const img = document.getElementById('preview-img');
+            if (img && img.complete && imageNaturalWidth > 0) {
+                imageDisplayWidth = img.clientWidth;
+                imageDisplayHeight = img.clientHeight;
+                scaleX = imageDisplayWidth / imageNaturalWidth;
+                scaleY = imageDisplayHeight / imageNaturalHeight;
+                
+                // Update overlay sizes
+                const overlayRaw = document.getElementById('overlay-raw');
+                const overlayTolerance = document.getElementById('overlay-tolerance');
+                const overlayMerged = document.getElementById('overlay-merged');
+                
+                overlayRaw.style.width = imageDisplayWidth + 'px';
+                overlayRaw.style.height = imageDisplayHeight + 'px';
+                overlayTolerance.style.width = imageDisplayWidth + 'px';
+                overlayTolerance.style.height = imageDisplayHeight + 'px';
+                overlayMerged.style.width = imageDisplayWidth + 'px';
+                overlayMerged.style.height = imageDisplayHeight + 'px';
+                
+                if (rawDetections.length > 0) {
+                    drawRawBoxes();
+                    runLiveMerge();
+                }
+            }
+        }, 250);
+    });
+
+    // Cleanup SSE connection on page unload
+    window.addEventListener('beforeunload', () => {
+        if (eventSource) {
+            eventSource.close();
+        }
+    });
+</script>
+
+</body>
+</html>
+
