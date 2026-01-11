@@ -59,6 +59,7 @@ def load_config():
             "api_url": "http://localhost:1234/v1",
             "api_key": "lm-studio",
             "model": "gpt-4-vision-preview",
+            "max_image_dimension": 1080,
             "text_detection": {
                 "min_confidence": 0.6,
                 "min_width": 30,
@@ -95,6 +96,35 @@ def capture_screenshot():
     except Exception as e:
         print(f"Error capturing screenshot: {e}")
         return None
+
+
+def resize_image_if_needed(image, max_dimension=2048):
+    """
+    Resize image if it exceeds maximum dimension, maintaining aspect ratio.
+    This prevents context window overflow when sending to vision APIs.
+    
+    Args:
+        image: PIL Image to resize
+        max_dimension: Maximum width or height in pixels (default: 2048)
+    
+    Returns:
+        Resized PIL Image (or original if no resize needed)
+    """
+    width, height = image.size
+    max_size = max(width, height)
+    
+    if max_size <= max_dimension:
+        return image
+    
+    # Calculate scaling factor to fit within max_dimension
+    scale = max_dimension / max_size
+    new_width = int(width * scale)
+    new_height = int(height * scale)
+    
+    # Use high-quality resampling
+    resized = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+    print(f"Resized image from {width}x{height} to {new_width}x{new_height} to fit context window")
+    return resized
 
 
 def image_to_base64(image):
@@ -147,6 +177,69 @@ def check_gpu_available():
         # Log the exception for debugging but return False
         print(f"Warning: Error checking GPU availability: {e}")
         return False
+
+
+def sort_text_regions_by_reading_order(text_regions, direction='hor_ltr', band_ratio=0.5):
+    """
+    Sort text regions by reading order (top-to-bottom, left-to-right for English).
+    Similar to comic-translate's sorting logic.
+    
+    Args:
+        text_regions: List of (x1, y1, x2, y2) bounding boxes
+        direction: Reading direction ('hor_ltr' for English, 'hor_rtl' for RTL languages)
+        band_ratio: Ratio for grouping items on the same line (default: 0.5)
+    
+    Returns:
+        Sorted list of bounding boxes in reading order
+    """
+    if not text_regions:
+        return []
+    
+    # Calculate median height for adaptive band grouping
+    heights = [(y2 - y1) for x1, y1, x2, y2 in text_regions]
+    median_h = np.median(heights) if heights else 30.0
+    adaptive_band = band_ratio * median_h
+    
+    # Group regions into lines (regions with similar y-coordinates)
+    lines = []
+    used = [False] * len(text_regions)
+    
+    for i, (x1, y1, x2, y2) in enumerate(text_regions):
+        if used[i]:
+            continue
+        
+        # Start a new line with this region
+        line = [(x1, y1, x2, y2)]
+        used[i] = True
+        center_y = (y1 + y2) / 2
+        
+        # Find other regions on the same line
+        for j, (x1_j, y1_j, x2_j, y2_j) in enumerate(text_regions):
+            if used[j]:
+                continue
+            center_y_j = (y1_j + y2_j) / 2
+            if abs(center_y - center_y_j) <= adaptive_band:
+                line.append((x1_j, y1_j, x2_j, y2_j))
+                used[j] = True
+        
+        lines.append(line)
+    
+    # Sort items within each line by x-coordinate (left-to-right for LTR)
+    for line_idx, line in enumerate(lines):
+        if direction == 'hor_ltr':
+            lines[line_idx] = sorted(line, key=lambda bbox: bbox[0])  # Sort by x1
+        else:  # hor_rtl
+            lines[line_idx] = sorted(line, key=lambda bbox: -bbox[0], reverse=True)  # Sort by x1 descending
+    
+    # Sort lines by y-coordinate (top-to-bottom)
+    lines.sort(key=lambda line: min(bbox[1] for bbox in line))  # Sort by min y1
+    
+    # Flatten back to list of regions
+    sorted_regions = []
+    for line in lines:
+        sorted_regions.extend(line)
+    
+    return sorted_regions
 
 
 def filter_text_regions(text_regions, image_shape, min_width=30, min_height=30):
@@ -295,6 +388,9 @@ def detect_text_regions(image, min_confidence=0.6, min_width=30, min_height=30):
         text_regions = filter_text_regions(filtered_regions, (img_height, img_width), 
                                           min_width=min_width, min_height=min_height)
         
+        # Sort regions by reading order (top-to-bottom, left-to-right for English)
+        text_regions = sort_text_regions_by_reading_order(text_regions, direction='hor_ltr')
+        
         return text_regions
     except Exception as e:
         print(f"Error detecting text regions: {e}")
@@ -329,45 +425,71 @@ def crop_text_regions(image, text_regions, padding=5):
 
 def extract_text_with_vision_api(image, config):
     """Extract text from a single image using OpenAI Vision API"""
-    try:
-        # Initialize OpenAI client with custom base URL
-        client = OpenAI(
-            api_key=config["api_key"],
-            base_url=config["api_url"]
-        )
-        
-        # Convert image to base64
-        base64_image = image_to_base64(image)
-        
-        # Call Vision API
-        response = client.chat.completions.create(
-            model=config["model"],
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {
-                            "type": "text",
-                            "text": "Extract all text from this image. Return only the extracted text, no additional commentary."
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/png;base64,{base64_image}"
+    # Initialize OpenAI client with custom base URL
+    client = OpenAI(
+        api_key=config["api_key"],
+        base_url=config["api_url"]
+    )
+    
+    # Start with configured max dimension, but reduce if we hit context window errors
+    max_dimension = config.get("max_image_dimension", 1080)
+    original_image = image
+    retry_count = 0
+    max_retries = 3
+    
+    while retry_count <= max_retries:
+        try:
+            # Resize image if too large to prevent context window overflow
+            current_image = resize_image_if_needed(original_image, max_dimension=max_dimension)
+            
+            # Convert image to base64
+            base64_image = image_to_base64(current_image)
+            
+            # Call Vision API
+            response = client.chat.completions.create(
+                model=config["model"],
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "text",
+                                "text": "Extract all text from this image. Return only the extracted text, no additional commentary."
+                            },
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/png;base64,{base64_image}"
+                                }
                             }
-                        }
-                    ]
-                }
-            ],
-            max_tokens=4096
-        )
-        
-        extracted_text = response.choices[0].message.content
-        return extracted_text
-        
-    except Exception as e:
-        print(f"Error calling Vision API: {e}")
-        return None
+                        ]
+                    }
+                ],
+                max_tokens=4096
+            )
+            
+            extracted_text = response.choices[0].message.content
+            return extracted_text
+            
+        except Exception as e:
+            error_str = str(e)
+            # Check if it's a context window error
+            if "context length" in error_str.lower() or "context overflow" in error_str.lower():
+                retry_count += 1
+                if retry_count <= max_retries:
+                    # Reduce max dimension by 25% and retry
+                    max_dimension = int(max_dimension * 0.75)
+                    print(f"Context window overflow detected. Retrying with smaller image size ({max_dimension}px max dimension)...")
+                    continue
+                else:
+                    print(f"Error: Failed after {max_retries} retries with reduced image sizes. Original error: {e}")
+                    return None
+            else:
+                # For other errors, don't retry
+                print(f"Error calling Vision API: {e}")
+                return None
+    
+    return None
 
 
 def save_debug_images(full_image, text_regions, cropped_images, output_dir="./tmp"):
