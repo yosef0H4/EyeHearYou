@@ -1,0 +1,10 @@
+[project]
+name = "ocr"
+version = "0.1.0"
+description = "Screenshot OCR application using OpenAI Vision API with global hotkey support"
+requires-python = ">=3.12"
+dependencies = [
+    "keyboard>=0.13.5",
+    "openai>=2.15.0",
+    "pillow>=12.1.0",
+]
