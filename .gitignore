@@ -26,3 +26,7 @@ Thumbs.db
 config.json
 uv.lock
 tmp/
+
+# Compiled TypeScript
+src/frontend/dist/
+*.js.map

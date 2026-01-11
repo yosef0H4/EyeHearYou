@@ -1,0 +1,13 @@
+{
+  "name": "ocr-configurator",
+  "version": "0.1.0",
+  "description": "OCR Configuration UI Frontend",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
+

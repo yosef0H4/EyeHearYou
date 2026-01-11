@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCR Configurator</title>
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body>
+
+<div class="sidebar">
+    <h2>📸 Screenshot OCR</h2>
+    
+    <!-- API Settings -->
+    <div class="section">
+        <h3>API Config</h3>
+        <label>API URL</label>
+        <input type="text" id="api_url" placeholder="http://localhost:1234/v1">
+        <label>API Key</label>
+        <input type="password" id="api_key" placeholder="lm-studio">
+        <label>Model</label>
+        <input type="text" id="model" placeholder="qwen/qwen3-vl-4b">
+        <button class="secondary" id="save-config-btn">💾 Save Config</button>
+    </div>
+
+    <!-- Paddle Settings -->
+    <div class="section">
+        <h3>1. Detection (PaddleOCR)</h3>
+        
+        <div class="mini-viz-container">
+            <div id="viz-paddle-box">A</div>
+        </div>
+
+        <div class="slider-container">
+            <label>Min Confidence <span id="val_conf" class="value-display">0.6</span></label>
+            <input type="range" id="min_confidence" min="0.1" max="1.0" step="0.05" value="0.6">
+            <div class="info-text">Controls detection sensitivity. Lower = more detections (may include noise)</div>
+        </div>
+
+        <div class="slider-container">
+            <label>Min Width (px) <span id="val_width" class="value-display">30</span></label>
+            <input type="range" id="min_width" min="5" max="100" step="1" value="30">
+        </div>
+
+        <div class="slider-container">
+            <label>Min Height (px) <span id="val_height" class="value-display">30</span></label>
+            <input type="range" id="min_height" min="5" max="100" step="1" value="30">
+        </div>
+        
+        <button id="detect-btn">🔍 Run Detection (Step 1)</button>
+        <div class="info-text">* Must run this to see red boxes on the image</div>
+    </div>
+
+    <!-- Merge Settings -->
+    <div class="section">
+        <h3>2. Merging (Live Preview)</h3>
+        
+        <div class="mini-viz-container">
+            <!-- Center Reference -->
+            <div id="viz-merge-center"></div>
+            <!-- Tolerance Zone -->
+            <div id="viz-merge-zone"></div>
+        </div>
+
+        <div class="slider-container">
+            <label>Vertical Tolerance <span id="val_vtol" class="value-display">30</span></label>
+            <input type="range" id="v_tol" min="0" max="200" step="5" value="30">
+            <div class="info-text">Max vertical gap between boxes to merge (px)</div>
+        </div>
+
+        <div class="slider-container">
+            <label>Horizontal Tolerance <span id="val_htol" class="value-display">50</span></label>
+            <input type="range" id="h_tol" min="0" max="300" step="5" value="50">
+            <div class="info-text">Max horizontal offset to consider aligned (px)</div>
+        </div>
+
+        <div class="slider-container">
+            <label>Width Ratio Threshold <span id="val_ratio" class="value-display">0.3</span></label>
+            <input type="range" id="w_ratio" min="0" max="1.0" step="0.05" value="0.3">
+            <div class="info-text">Min width similarity ratio (0.0-1.0) to merge boxes</div>
+        </div>
+        
+        <div class="info-text">* Yellow/Blue boxes update live as you adjust sliders</div>
+    </div>
+
+    <button class="success" id="capture-btn">📷 New Screenshot</button>
+    <div class="info-text" style="margin-top: 10px; text-align: center;">
+        💡 Tip: Press <strong>Ctrl+Shift+Alt+Z</strong> anywhere to capture screenshot automatically
+    </div>
+    <button class="warning" id="extract-btn">🚀 EXTRACT TEXT</button>
+</div>
+
+<div class="preview-area">
+    <div id="image-container">
+        <div id="image-wrapper" style="display: none;">
+            <img id="preview-img" src="" alt="Capture or Load Image">
+            <div id="overlay-raw" class="overlay-layer"></div>
+            <div id="overlay-tolerance" class="overlay-layer"></div>
+            <div id="overlay-merged" class="overlay-layer"></div>
+        </div>
+        <div id="placeholder" style="color: #666; padding: 40px; text-align: center;">
+            <div style="font-size: 48px; margin-bottom: 20px;">📸</div>
+            <div>Click "New Screenshot" to capture an image</div>
+        </div>
+    </div>
+    <div id="output-text" placeholder="Extracted text will appear here...">Waiting for extraction...</div>
+</div>
+
+<script type="module" src="/dist/main.js"></script>
+</body>
+</html>
+

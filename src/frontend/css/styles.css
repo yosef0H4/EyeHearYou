@@ -1,0 +1,281 @@
+:root {
+    --bg-color: #1e1e1e;
+    --panel-bg: #252526;
+    --text-color: #d4d4d4;
+    --accent: #007acc;
+    --border: #3e3e42;
+    --box-raw: rgba(255, 0, 0, 0.3);
+    --box-raw-border: #ff0000;
+    --box-merged: rgba(0, 100, 255, 0.2);
+    --box-merged-border: #0088ff;
+    --box-tolerance: rgba(255, 255, 0, 0.15);
+    --box-tolerance-border: #ffff00;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    margin: 0;
+    height: 100vh;
+    display: flex;
+    overflow: hidden;
+}
+
+/* Left Sidebar */
+.sidebar {
+    width: 380px;
+    background-color: var(--panel-bg);
+    border-right: 1px solid var(--border);
+    padding: 20px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.section {
+    background: #2d2d30;
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+}
+
+h2 { 
+    margin: 0 0 10px 0; 
+    color: #fff; 
+    font-size: 18px; 
+}
+
+h3 { 
+    margin: 0 0 15px 0; 
+    color: #fff; 
+    font-size: 13px; 
+    text-transform: uppercase; 
+    letter-spacing: 1px; 
+    font-weight: 600;
+}
+
+label { 
+    display: block; 
+    margin-bottom: 8px; 
+    font-size: 12px; 
+    color: #ccc;
+}
+
+input[type="range"] { 
+    width: 100%; 
+    margin-bottom: 8px; 
+    cursor: pointer;
+}
+
+input[type="text"], 
+input[type="password"], 
+input[type="number"] {
+    width: 100%; 
+    box-sizing: border-box; 
+    background: #3c3c3c; 
+    border: 1px solid #555; 
+    color: white; 
+    padding: 8px; 
+    margin-bottom: 10px;
+    border-radius: 4px;
+    font-size: 12px;
+}
+
+button {
+    width: 100%;
+    padding: 12px;
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-top: 5px;
+    font-weight: 600;
+    font-size: 13px;
+    transition: filter 0.2s;
+}
+button:hover { 
+    filter: brightness(1.15); 
+}
+button:active {
+    filter: brightness(0.9);
+}
+button.secondary { 
+    background: #444; 
+}
+button.success {
+    background: #2d8a56;
+}
+button.warning {
+    background: #d17821;
+    font-size: 16px;
+    padding: 15px;
+}
+
+/* Mini Visualizers */
+.mini-viz-container {
+    height: 120px;
+    background: #000;
+    border: 1px dashed #555;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 15px;
+    position: relative;
+    overflow: hidden;
+    border-radius: 4px;
+}
+
+/* Visualizer 1: Paddle Settings */
+#viz-paddle-box {
+    border: 2px solid red;
+    background: rgba(255,0,0,0.1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: red;
+    font-weight: bold;
+    font-size: 24px;
+    transition: all 0.2s ease;
+    min-width: 20px;
+    min-height: 20px;
+}
+
+/* Visualizer 2: Merge Settings */
+#viz-merge-center {
+    width: 50px; 
+    height: 25px;
+    background: rgba(255, 255, 0, 0.3);
+    border: 1px solid yellow;
+    position: absolute;
+    z-index: 2;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+}
+#viz-merge-zone {
+    position: absolute;
+    border: 1px dashed yellow;
+    background: rgba(255, 255, 0, 0.1);
+    z-index: 1;
+    transition: all 0.15s ease;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+}
+
+/* Right Panel: Main Preview */
+.preview-area {
+    flex: 1;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    background: #1e1e1e;
+}
+
+#image-container {
+    flex: 1;
+    background: #111;
+    border: 1px solid var(--border);
+    position: relative;
+    overflow: auto;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    min-height: 0;
+    padding: 20px;
+}
+
+#image-wrapper {
+    position: relative;
+    display: inline-block;
+}
+
+#preview-img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+}
+
+/* Overlay System */
+.overlay-layer {
+    position: absolute;
+    top: 0; 
+    left: 0;
+    pointer-events: none; /* Click through to image */
+}
+
+.box {
+    position: absolute;
+    box-sizing: border-box;
+    display: flex;
+    align-items: flex-start;
+    justify-content: flex-start;
+}
+
+.box-raw {
+    border: 2px solid var(--box-raw-border);
+    background: var(--box-raw);
+}
+
+.box-merged {
+    border: 2px solid var(--box-merged-border);
+    background: var(--box-merged);
+    z-index: 10;
+}
+
+.box-tolerance {
+    border: 1px dashed var(--box-tolerance-border);
+    background: var(--box-tolerance);
+    z-index: 5;
+    pointer-events: none;
+}
+
+.box-label {
+    background: var(--box-merged-border);
+    color: white;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 2px;
+    margin: 2px;
+    font-weight: bold;
+}
+
+#output-text {
+    height: 150px;
+    background: #111;
+    border: 1px solid var(--border);
+    color: #eee;
+    padding: 12px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    border-radius: 4px;
+}
+
+.value-display { 
+    float: right; 
+    color: #aaa; 
+    font-weight: 600;
+}
+
+.info-text {
+    font-size: 10px; 
+    color: #888; 
+    margin-top: 5px;
+    font-style: italic;
+}
+
+.slider-container {
+    margin-bottom: 15px;
+}
+
