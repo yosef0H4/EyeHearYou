@@ -58,7 +58,12 @@ def load_config():
         default_config = {
             "api_url": "http://localhost:1234/v1",
             "api_key": "lm-studio",
-            "model": "gpt-4-vision-preview"
+            "model": "gpt-4-vision-preview",
+            "text_detection": {
+                "min_confidence": 0.6,
+                "min_width": 30,
+                "min_height": 30
+            }
         }
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(default_config, f, indent=4)
@@ -144,7 +149,7 @@ def check_gpu_available():
         return False
 
 
-def filter_text_regions(text_regions, image_shape, min_width=30, min_height=30, min_area=400):
+def filter_text_regions(text_regions, image_shape, min_width=30, min_height=30):
     """
     Filter out small text regions that are likely UI elements, icons, or noise.
     Similar to comic-translate's filter_and_fix_bboxes but with larger thresholds.
@@ -152,9 +157,8 @@ def filter_text_regions(text_regions, image_shape, min_width=30, min_height=30, 
     Args:
         text_regions: List of (x1, y1, x2, y2) bounding boxes
         image_shape: Tuple (height, width) of the image
-        min_width: Minimum width in pixels to keep (default: 20)
-        min_height: Minimum height in pixels to keep (default: 20)
-        min_area: Minimum area in pixels to keep (default: 400)
+        min_width: Minimum width in pixels to keep (default: 30)
+        min_height: Minimum height in pixels to keep (default: 30)
     
     Returns:
         Filtered list of bounding boxes
@@ -175,7 +179,6 @@ def filter_text_regions(text_regions, image_shape, min_width=30, min_height=30, 
         # Calculate dimensions
         w = x2 - x1
         h = y2 - y1
-        area = w * h
         
         # Filter out invalid or too small regions
         if w <= 0 or h <= 0:
@@ -185,16 +188,12 @@ def filter_text_regions(text_regions, image_shape, min_width=30, min_height=30, 
         if w <= min_width or h <= min_height:
             continue
         
-        # Filter by minimum area (to exclude small icons)
-        if area <= min_area:
-            continue
-        
         filtered.append((x1, y1, x2, y2))
     
     return filtered
 
 
-def detect_text_regions(image, min_confidence=0.6):
+def detect_text_regions(image, min_confidence=0.6, min_width=30, min_height=30):
     """
     Detect text regions in the image using PaddleOCR TextDetection module (detection only).
     Returns a list of bounding boxes as (x1, y1, x2, y2) tuples.
@@ -293,7 +292,8 @@ def detect_text_regions(image, min_confidence=0.6):
             print(f"Filtered out {len(text_regions) - len(filtered_regions)} low-confidence detections (confidence < {min_confidence})")
         
         # Then filter out small regions (UI elements, icons, etc.)
-        text_regions = filter_text_regions(filtered_regions, (img_height, img_width))
+        text_regions = filter_text_regions(filtered_regions, (img_height, img_width), 
+                                          min_width=min_width, min_height=min_height)
         
         return text_regions
     except Exception as e:
@@ -416,8 +416,17 @@ def extract_text_from_regions(full_image, config):
     Extract text by first detecting text regions, then sending only those regions to the API.
     This is more cost-effective than sending the full image.
     """
+    # Get text detection settings from config
+    text_detection_config = config.get("text_detection", {})
+    min_confidence = text_detection_config.get("min_confidence", 0.6)
+    min_width = text_detection_config.get("min_width", 30)
+    min_height = text_detection_config.get("min_height", 30)
+    
     # Try to detect text regions first
-    text_regions = detect_text_regions(full_image)
+    text_regions = detect_text_regions(full_image, 
+                                      min_confidence=min_confidence,
+                                      min_width=min_width,
+                                      min_height=min_height)
     
     if text_regions is None or len(text_regions) == 0:
         # Fallback: if detection fails or no regions found, use full image
