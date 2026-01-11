@@ -403,6 +403,111 @@ def detect_text_regions(image, min_confidence=0.6, min_width=30, min_height=30):
         return None
 
 
+def detect_text_regions_unfiltered(image, min_confidence=0.6):
+    """
+    Detect text regions in the image using PaddleOCR, but return ALL detections
+    after confidence filtering (before size filtering).
+    This allows the frontend to do size filtering live.
+    
+    Args:
+        image: PIL Image to process
+        min_confidence: Minimum confidence score (0.0-1.0) to keep a detection.
+    
+    Returns:
+        List of bounding boxes as (x1, y1, x2, y2) tuples (after confidence filtering only)
+    """
+    if not PADDLEOCR_AVAILABLE or TextDetection is None or cv2 is None:
+        return None
+    
+    try:
+        # Check if GPU is available
+        use_gpu = check_gpu_available()
+        if use_gpu:
+            print("GPU detected, using GPU acceleration for text detection...")
+            device = 'gpu'
+        else:
+            print("Using CPU for text detection...")
+            device = 'cpu'
+        
+        # Use TextDetection module directly for detection-only
+        det_model = TextDetection(model_name="PP-OCRv5_mobile_det", device=device)
+        
+        # Convert PIL to numpy array (RGB)
+        img_array = np.array(image)
+        img_height, img_width = img_array.shape[:2]
+        # Convert RGB to BGR for OpenCV/PaddleOCR
+        img_bgr = cv2.cvtColor(img_array, cv2.COLOR_RGB2BGR)
+        
+        # Run detection
+        output = det_model.predict(img_bgr, batch_size=1)
+        
+        # Extract bounding boxes from TextDetection output
+        text_regions = []
+        confidence_scores = []
+        
+        if output and len(output) > 0:
+            for result in output:
+                if hasattr(result, 'json'):
+                    res_dict = result.json
+                elif isinstance(result, dict):
+                    res_dict = result
+                else:
+                    continue
+                
+                if 'res' in res_dict and 'dt_polys' in res_dict['res']:
+                    dt_polys = res_dict['res']['dt_polys']
+                    dt_scores = res_dict['res'].get('dt_scores', [])
+                    
+                    if isinstance(dt_polys, np.ndarray):
+                        dt_polys = dt_polys.tolist()
+                    if isinstance(dt_scores, np.ndarray):
+                        dt_scores = dt_scores.tolist()
+                    elif not isinstance(dt_scores, list):
+                        dt_scores = []
+                    
+                    if isinstance(dt_polys, list):
+                        for idx, poly in enumerate(dt_polys):
+                            if isinstance(poly, np.ndarray):
+                                poly = poly.tolist()
+                            
+                            if isinstance(poly, list) and len(poly) >= 4:
+                                first_elem = poly[0]
+                                if isinstance(first_elem, (list, tuple, np.ndarray)) and len(first_elem) >= 2:
+                                    x_coords = [float(point[0]) for point in poly]
+                                    y_coords = [float(point[1]) for point in poly]
+                                    x1, x2 = int(min(x_coords)), int(max(x_coords))
+                                    y1, y2 = int(min(y_coords)), int(max(y_coords))
+                                    
+                                    if x2 > x1 and y2 > y1:
+                                        text_regions.append((x1, y1, x2, y2))
+                                        score = float(dt_scores[idx]) if idx < len(dt_scores) else 1.0
+                                        confidence_scores.append(score)
+        
+        # Filter by confidence score only (no size filtering)
+        filtered_regions = []
+        for region, score in zip(text_regions, confidence_scores):
+            if score >= min_confidence:
+                filtered_regions.append(region)
+        
+        if len(text_regions) > len(filtered_regions):
+            print(f"Filtered out {len(text_regions) - len(filtered_regions)} low-confidence detections (confidence < {min_confidence})")
+        
+        # Return regions after confidence filtering only (no size filtering, no sorting)
+        # The frontend will handle size filtering and sorting for live updates
+        return filtered_regions
+    except Exception as e:
+        print(f"Error detecting text regions: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+    except Exception as e:
+        print(f"Error detecting text regions: {e}")
+        print("Falling back to full image processing...")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
 def merge_close_text_boxes(text_regions, vertical_tolerance=30, horizontal_tolerance=50, width_ratio_threshold=0.3):
     """
     Merge text boxes that are close together vertically (like split lines of dialogue).

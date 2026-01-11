@@ -9,7 +9,8 @@ export class ImageViewer {
     private imageDisplayHeight: number = 0;
     private scaleX: number = 1;
     private scaleY: number = 1;
-    private rawDetections: BoundingBoxTuple[] = [];
+    private unfilteredDetections: BoundingBoxTuple[] = [];  // All detections from server
+    private rawDetections: BoundingBoxTuple[] = [];  // Filtered by min_width/min_height
 
     constructor() {
         this.setupResizeHandler();
@@ -68,6 +69,11 @@ export class ImageViewer {
                         this.updateOverlaySizes();
                         this.clearBoxes();
                         
+                        // Re-apply size filter if we have unfiltered detections
+                        if (this.unfilteredDetections.length > 0) {
+                            this.applySizeFilter();
+                        }
+                        
                         const outputText = document.getElementById('output-text') as HTMLElement;
                         if (outputText) {
                             outputText.innerText = `✅ Screenshot updated (version ${data.version || 0}). Ready to detect text regions.`;
@@ -100,9 +106,71 @@ export class ImageViewer {
     }
 
     setRawDetections(detections: BoundingBoxTuple[]): void {
-        this.rawDetections = detections;
+        // Store unfiltered detections for live size filtering
+        this.unfilteredDetections = detections;
+        this.applySizeFilter();
+    }
+
+    /**
+     * Filter detections by min_width and min_height (ported from Python filter_text_regions)
+     */
+    private applySizeFilter(): void {
+        const minWidthInput = document.getElementById('min_width') as HTMLInputElement;
+        const minHeightInput = document.getElementById('min_height') as HTMLInputElement;
+        
+        const min_width = parseInt(minWidthInput?.value || '30');
+        const min_height = parseInt(minHeightInput?.value || '30');
+        
+        if (!this.unfilteredDetections || this.unfilteredDetections.length === 0) {
+            this.rawDetections = [];
+            this.drawRawBoxes();
+            this.runLiveMerge();
+            return;
+        }
+        
+        // Need image dimensions for clamping - if not available yet, skip filtering
+        if (this.imageNaturalWidth === 0 || this.imageNaturalHeight === 0) {
+            // Image not loaded yet, store unfiltered and wait
+            this.rawDetections = this.unfilteredDetections;
+            return;
+        }
+        
+        const filtered: BoundingBoxTuple[] = [];
+        
+        for (const [x1, y1, x2, y2] of this.unfilteredDetections) {
+            // Clamp coordinates to image bounds
+            const clamped_x1 = Math.max(0, Math.min(x1, this.imageNaturalWidth));
+            const clamped_x2 = Math.max(0, Math.min(x2, this.imageNaturalWidth));
+            const clamped_y1 = Math.max(0, Math.min(y1, this.imageNaturalHeight));
+            const clamped_y2 = Math.max(0, Math.min(y2, this.imageNaturalHeight));
+            
+            // Calculate dimensions
+            const w = clamped_x2 - clamped_x1;
+            const h = clamped_y2 - clamped_y1;
+            
+            // Filter out invalid or too small regions
+            if (w <= 0 || h <= 0) {
+                continue;
+            }
+            
+            // Filter by minimum size (width and height)
+            if (w <= min_width || h <= min_height) {
+                continue;
+            }
+            
+            filtered.push([clamped_x1, clamped_y1, clamped_x2, clamped_y2]);
+        }
+        
+        this.rawDetections = filtered;
         this.drawRawBoxes();
         this.runLiveMerge();
+    }
+
+    /**
+     * Call this when min_width or min_height sliders change for live updates
+     */
+    updateSizeFilter(): void {
+        this.applySizeFilter();
     }
 
     private drawRawBoxes(): void {
@@ -190,6 +258,7 @@ export class ImageViewer {
 
     private clearBoxes(): void {
         this.rawDetections = [];
+        this.unfilteredDetections = [];
         const overlayRaw = document.getElementById('overlay-raw');
         const overlayTolerance = document.getElementById('overlay-tolerance');
         const overlayMerged = document.getElementById('overlay-merged');

@@ -63,8 +63,20 @@ function setupEventListeners(): void {
     const minHeightInput = document.getElementById('min_height') as HTMLInputElement;
     
     if (minConfInput) minConfInput.addEventListener('input', updatePaddleViz);
-    if (minWidthInput) minWidthInput.addEventListener('input', updatePaddleViz);
-    if (minHeightInput) minHeightInput.addEventListener('input', updatePaddleViz);
+    if (minWidthInput) {
+        minWidthInput.addEventListener('input', () => {
+            updatePaddleViz();
+            // Live update size filtering
+            if (imageViewer) imageViewer.updateSizeFilter();
+        });
+    }
+    if (minHeightInput) {
+        minHeightInput.addEventListener('input', () => {
+            updatePaddleViz();
+            // Live update size filtering
+            if (imageViewer) imageViewer.updateSizeFilter();
+        });
+    }
     
     // Merge settings sliders
     const vTolInput = document.getElementById('v_tol') as HTMLInputElement;
