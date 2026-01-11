@@ -7,4 +7,5 @@ dependencies = [
     "keyboard>=0.13.5",
     "openai>=2.15.0",
     "pillow>=12.1.0",
+    "pygetwindow>=0.0.9",
 ]

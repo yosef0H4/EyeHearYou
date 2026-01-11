@@ -10,6 +10,7 @@ from io import BytesIO
 from pathlib import Path
 
 import keyboard
+import pygetwindow as gw
 from openai import OpenAI
 from PIL import ImageGrab
 
@@ -46,9 +47,24 @@ def load_config():
 
 
 def capture_screenshot():
-    """Capture the entire screen"""
+    """Capture the active window"""
     try:
-        screenshot = ImageGrab.grab()
+        # Get the active window
+        active_window = gw.getActiveWindow()
+        if active_window is None:
+            print("Error: No active window found")
+            return None
+        
+        # Get window position and size
+        left = active_window.left
+        top = active_window.top
+        width = active_window.width
+        height = active_window.height
+        
+        # Capture only the active window region
+        bbox = (left, top, left + width, top + height)
+        screenshot = ImageGrab.grab(bbox=bbox)
+        
         return screenshot
     except Exception as e:
         print(f"Error capturing screenshot: {e}")
@@ -109,7 +125,7 @@ def extract_text_with_vision_api(image, config):
 def process_screenshot():
     """Main function to capture screenshot and extract text"""
     print("\n" + "="*60)
-    print("Capturing screenshot...")
+    print("Capturing active window...")
     
     # Load config
     config = load_config()

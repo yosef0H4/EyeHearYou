@@ -4,7 +4,7 @@ A Python application that captures screenshots on hotkey press (Ctrl+Shift+Alt+Z
 
 ## Features
 
-- **Global Hotkey**: Press `Ctrl+Shift+Alt+Z` to capture screenshot and extract text
+- **Global Hotkey**: Press `Ctrl+Shift+Alt+Z` to capture active window and extract text
 - **OpenAI Vision API**: Uses Vision API for accurate text extraction
 - **Configurable**: Customize API URL, key, and model via `config.json`
 - **LM Studio Compatible**: Works out of the box with LM Studio
@@ -67,7 +67,7 @@ The application will:
 3. Wait for the hotkey press
 
 When you press `Ctrl+Shift+Alt+Z`:
-1. Captures the entire screen
+1. Captures the active window
 2. Sends the screenshot to the Vision API
 3. Extracts and prints text to the console
 
@@ -76,7 +76,7 @@ Press `Ctrl+C` to exit.
 ## Notes
 
 - **Windows**: The `keyboard` library requires administrator privileges for global hotkeys
-- **Screenshot**: Captures the entire screen (full screen capture)
+- **Screenshot**: Captures only the active window (not the full screen)
 - **API Compatibility**: Works with any OpenAI-compatible API endpoint
 
 ## Troubleshooting
