@@ -30,3 +30,5 @@ tmp/
 # Compiled TypeScript
 src/frontend/dist/
 *.js.map
+package-lock.json
+node_modules/
