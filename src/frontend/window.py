@@ -15,6 +15,8 @@ from PyQt6.QtGui import QPixmap, QImage, QPen, QColor, QBrush, QPainter, QFont, 
 from src.backend.core.config import load_config, CONFIG_FILE
 from src.backend.core.capture import capture_screenshot
 from src.backend.state import state
+from src.backend.core.filtering import filter_text_regions, sort_text_regions_by_reading_order
+from src.backend.core.merging import merge_close_text_boxes
 from src.frontend.widgets import UnifiedSettingsViz, ResizeVizWidget
 from src.frontend.worker import OCRWorker
 from src.frontend.theme import DARK_THEME_STYLESHEET
@@ -51,6 +53,7 @@ class OCRWindow(QMainWindow):
         self.resize(1400, 950)
         self.config = load_config()
         self.worker: Optional[OCRWorker] = None
+        self.raw_boxes: List[Tuple[int, int, int, int]] = []  # All detections (unfiltered)
         self.filtered_boxes: List[Tuple[int, int, int, int]] = []
         self.merged_boxes: List[dict] = []  # List of dicts with 'rect', 'count', 'originalBoxes'
         self.pixmap_item = None  # Store reference to pixmap item
@@ -382,7 +385,10 @@ class OCRWindow(QMainWindow):
             self.config["reading_direction"] = "ltr"
         else:
             self.config["reading_direction"] = "rtl"
-        self.save_and_refresh()
+        if self.raw_boxes:
+            self.preview_live_merging()
+        else:
+            self.save_and_refresh()
 
     def create_text_processing_group(self, layout):
         """Combined Detection and Merging Settings"""
@@ -443,11 +449,12 @@ class OCRWindow(QMainWindow):
             w_sl.blockSignals(True); w_sl.setValue(v); w_sl.blockSignals(False)
             w_sp.blockSignals(True); w_sp.setValue(v); w_sp.blockSignals(False)
             update_viz_detection()
+            self.preview_live_filtering()
         
         w_sl.valueChanged.connect(on_w_change)
-        w_sl.sliderReleased.connect(self.save_and_refresh)
+        w_sl.sliderReleased.connect(self.finalize_live_preview)
         w_sp.valueChanged.connect(on_w_change)
-        w_sp.editingFinished.connect(self.save_and_refresh)
+        w_sp.editingFinished.connect(self.finalize_live_preview)
         
         # Reset button
         def reset_w():
@@ -479,11 +486,12 @@ class OCRWindow(QMainWindow):
             h_sl.blockSignals(True); h_sl.setValue(v); h_sl.blockSignals(False)
             h_sp.blockSignals(True); h_sp.setValue(v); h_sp.blockSignals(False)
             update_viz_detection()
+            self.preview_live_filtering()
             
         h_sl.valueChanged.connect(on_h_change)
-        h_sl.sliderReleased.connect(self.save_and_refresh)
+        h_sl.sliderReleased.connect(self.finalize_live_preview)
         h_sp.valueChanged.connect(on_h_change)
-        h_sp.editingFinished.connect(self.save_and_refresh)
+        h_sp.editingFinished.connect(self.finalize_live_preview)
         
         # Reset button
         def reset_h():
@@ -585,16 +593,18 @@ class OCRWindow(QMainWindow):
                     sp.blockSignals(True); sp.setValue(real_val); sp.blockSignals(False)
                 
                 update_viz_merge()
+                self.preview_live_merging()
             
             if is_float:
                 sl.valueChanged.connect(on_change)
-                sp.valueChanged.connect(on_change) # Double spin box emits float
+                # Double spin box emits float
+                sp.valueChanged.connect(on_change) 
             else:
                 sl.valueChanged.connect(on_change)
                 sp.valueChanged.connect(on_change)
 
-            sl.sliderReleased.connect(self.save_and_refresh)
-            sp.editingFinished.connect(self.save_and_refresh)
+            sl.sliderReleased.connect(self.finalize_live_preview)
+            sp.editingFinished.connect(self.finalize_live_preview)
             
             # Reset button
             def reset_val():
@@ -639,11 +649,12 @@ class OCRWindow(QMainWindow):
             
             g_sl.blockSignals(True); g_sl.setValue(int(real_val*10)); g_sl.blockSignals(False)
             g_sp.blockSignals(True); g_sp.setValue(real_val); g_sp.blockSignals(False)
+            self.preview_live_merging()
             
         g_sl.valueChanged.connect(on_grp_change)
-        g_sl.sliderReleased.connect(self.save_and_refresh)
+        g_sl.sliderReleased.connect(self.finalize_live_preview)
         g_sp.valueChanged.connect(on_grp_change)
-        g_sp.editingFinished.connect(self.save_and_refresh)
+        g_sp.editingFinished.connect(self.finalize_live_preview)
         
         # Reset button
         def reset_grp():
@@ -673,6 +684,17 @@ class OCRWindow(QMainWindow):
         if state.last_image:
             # Debounce: wait a bit before refreshing
             QTimer.singleShot(300, self.run_detection_preview)
+
+    def finalize_live_preview(self):
+        """Called when slider is released: Saves config and redraws clean state"""
+        self.save_config()
+        # We don't need to re-run detection if we have raw_boxes.
+        # We can just apply the filters locally and "commit" the view.
+        if self.raw_boxes:
+            self.preview_live_merging(show_tolerance_zones=False)
+            self.status_label.setText("Settings applied.")
+        else:
+            self.run_detection_preview()
 
     def save_config(self):
         """Save config to file"""
@@ -745,6 +767,7 @@ class OCRWindow(QMainWindow):
     def display_image(self, pil_image):
         """Display PIL image in graphics view"""
         self.scene.clear()
+        self.raw_boxes = []
         self.filtered_boxes = []
         self.merged_boxes = []
         self.pixmap_item = None  # Reset reference
@@ -772,6 +795,119 @@ class OCRWindow(QMainWindow):
         
         for item in items_to_remove:
             self.scene.removeItem(item)
+
+    def preview_live_filtering(self):
+        """Show raw boxes: Green (Keep) vs Red (Discard) based on current min_width/min_height"""
+        if not self.raw_boxes or not self.pixmap_item:
+            return
+
+        self.clear_all_boxes()
+        
+        min_w = self.config["text_detection"].get("min_width", 30)
+        min_h = self.config["text_detection"].get("min_height", 30)
+        img_w = self.pixmap_item.pixmap().width()
+        img_h = self.pixmap_item.pixmap().height()
+        
+        # Prepare pens/brushes
+        pen_keep = QPen(QColor(0, 255, 0), 2)  # Green solid
+        brush_keep = QBrush(QColor(0, 255, 0, 50))  # Semi-transparent green
+        
+        pen_discard = QPen(QColor(255, 0, 0), 1)  # Red dashed
+        pen_discard.setStyle(Qt.PenStyle.DashLine)
+        brush_discard = QBrush(QColor(255, 0, 0, 30))  # Semi-transparent red
+        
+        # Filter logic (duplicated from backend for speed)
+        for (x1, y1, x2, y2) in self.raw_boxes:
+            # Clamp
+            x1 = max(0, min(x1, img_w)); x2 = max(0, min(x2, img_w))
+            y1 = max(0, min(y1, img_h)); y2 = max(0, min(y2, img_h))
+            w = x2 - x1
+            h = y2 - y1
+            
+            if w <= 0 or h <= 0: continue
+            
+            if w > min_w and h > min_h:
+                # Keep (Green)
+                self.scene.addRect(float(x1), float(y1), float(w), float(h), pen_keep, brush_keep)
+            else:
+                # Discard (Red Ghost)
+                self.scene.addRect(float(x1), float(y1), float(w), float(h), pen_discard, brush_discard)
+
+    def preview_live_merging(self, show_tolerance_zones=True):
+        """Calculate and show merges live using Python (fast enough for typical OCR)"""
+        if not self.raw_boxes or not self.pixmap_item:
+            return
+
+        # 1. Local Filtering
+        min_w = self.config["text_detection"].get("min_width", 30)
+        min_h = self.config["text_detection"].get("min_height", 30)
+        img_w = self.pixmap_item.pixmap().width() if self.pixmap_item else 2000
+        img_h = self.pixmap_item.pixmap().height() if self.pixmap_item else 2000
+        
+        filtered = filter_text_regions(self.raw_boxes, (img_h, img_w), min_width=min_w, min_height=min_h)
+        
+        # 2. Local Sorting
+        sort_config = self.config.get("text_sorting", {})
+        direction = sort_config.get("direction", "horizontal_ltr")
+        group_tol = sort_config.get("group_tolerance", 0.8)
+        
+        sorted_regions = sort_text_regions_by_reading_order(
+            filtered, direction=direction, group_tolerance=group_tol
+        )
+        
+        # 3. Local Merging
+        td_config = self.config.get("text_detection", {})
+        merged, is_merged_flags, original_groups = merge_close_text_boxes(
+            sorted_regions,
+            vertical_tolerance=td_config.get("merge_vertical_tolerance", 4),
+            horizontal_tolerance=td_config.get("merge_horizontal_tolerance", 50),
+            width_ratio_threshold=td_config.get("merge_width_ratio_threshold", 0.3)
+        )
+        
+        # 4. Re-Sort Results
+        merged_regions = sort_text_regions_by_reading_order(
+            merged, direction=direction, group_tolerance=group_tol
+        )
+        
+        # Format for drawing
+        # Create map to find original groups for the re-sorted merged regions
+        # This is a lightweight approximate mapping for visualization
+        merged_boxes_info = []
+        
+        # Helper to map back (simple version for viz)
+        # We need to reconstruct the info dicts
+        unsorted_info = []
+        for m_box, flag, group in zip(merged, is_merged_flags, original_groups):
+            if flag and group:
+                unsorted_info.append({"rect": m_box, "count": len(group), "originalBoxes": group})
+            else:
+                unsorted_info.append({"rect": m_box, "count": 1, "originalBoxes": [m_box]})
+        
+        # Map rect -> info
+        rect_map = {tuple(info["rect"]): info for info in unsorted_info}
+        
+        final_info_list = []
+        for r in merged_regions:
+            t = tuple(r)
+            if t in rect_map:
+                final_info_list.append(rect_map[t])
+        
+        # Draw
+        self.clear_all_boxes()
+        self.merged_boxes = final_info_list
+        self.filtered_boxes = filtered  # Update state
+        
+        # Always draw ordering visualization
+        if final_info_list:
+            self.draw_ordering_visualization(final_info_list)
+        
+        # Draw tolerance zones if dragging (Yellow)
+        if show_tolerance_zones and final_info_list:
+            # Draw yellow zones for ALL boxes (even single ones) to show search area
+            self.draw_tolerance_zones(final_info_list, force_draw_all=True)
+            
+        # Draw Merged Result (Blue)
+        self.draw_merged_boxes(final_info_list)
 
     def draw_filtered_boxes(self, boxes: List[Tuple[int, int, int, int]]):
         """Draw red filtered boxes (raw detections)"""
@@ -859,7 +995,7 @@ class OCRWindow(QMainWindow):
                 count_text.setZValue(101)
                 self.scene.addItem(count_text)
 
-    def draw_tolerance_zones(self, merged_boxes_info: List[dict]):
+    def draw_tolerance_zones(self, merged_boxes_info: List[dict], force_draw_all=False):
         """Draw yellow tolerance zones around original boxes"""
         td_config = self.config.get("text_detection", {})
         v_tol = td_config.get("merge_vertical_tolerance", 4)
@@ -873,8 +1009,8 @@ class OCRWindow(QMainWindow):
             count = box_info.get("count", 1)
             original_boxes = box_info.get("originalBoxes", [])
             
-            # Only draw tolerance zones for merged boxes (count > 1)
-            if count > 1 and original_boxes:
+            # Draw if it's a merged group OR if we are in "live tuning" mode (force_draw_all)
+            if (count > 1 or force_draw_all) and original_boxes:
                 for orig_box in original_boxes:
                     ox1, oy1, ox2, oy2 = orig_box
                     # Expand by tolerance
@@ -1063,7 +1199,7 @@ class OCRWindow(QMainWindow):
         self.status_label.setText(msg)
         self.progress_bar.setValue(percent)
 
-    def on_worker_finished(self, filtered_boxes: List, merged_boxes_info: List, text: Optional[str]):
+    def on_worker_finished(self, raw_boxes: List, filtered_boxes: List, merged_boxes_info: List, text: Optional[str]):
         """Handle worker completion"""
         self.btn_cancel.setEnabled(False)
         self.btn_capture.setEnabled(True)
@@ -1071,6 +1207,7 @@ class OCRWindow(QMainWindow):
         self.progress_bar.setValue(100)
 
         # Store boxes
+        self.raw_boxes = raw_boxes if raw_boxes else []
         self.filtered_boxes = filtered_boxes if filtered_boxes else []
         self.merged_boxes = merged_boxes_info if merged_boxes_info else []
 

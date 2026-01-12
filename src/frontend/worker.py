@@ -13,7 +13,7 @@ from src.backend.state import state
 class OCRWorker(QThread):
     """Worker thread for OCR operations to prevent UI freezing"""
     progress_signal = pyqtSignal(str, int)  # Message, Percent
-    finished_signal = pyqtSignal(object, object, str)  # Filtered Boxes, Merged Boxes (with info), Text
+    finished_signal = pyqtSignal(object, object, object, str)  # Raw Boxes, Filtered Boxes, Merged Boxes (with info), Text
     error_signal = pyqtSignal(str)
     image_processed_signal = pyqtSignal(object)  # Emits PIL Image after preprocessing
 
@@ -62,10 +62,13 @@ class OCRWorker(QThread):
                 if self.mode == "full":
                     from src.backend.core.extraction import extract_text_with_vision_api
                     text = extract_text_with_vision_api(image, self.config)
-                    self.finished_signal.emit([], [], text or "No text extracted.")
+                    self.finished_signal.emit([], [], [], text or "No text extracted.")
                 else:
-                    self.finished_signal.emit([], [], None)
+                    self.finished_signal.emit([], [], [], None)
                 return
+            
+            # Extract raw boxes for UI
+            all_boxes = [bbox for bbox, score in raw_detections_with_scores]
             
             # Apply filters
             # Note: RapidOCR doesn't provide confidence scores in detection-only mode,
@@ -74,9 +77,6 @@ class OCRWorker(QThread):
             min_height = int(td_config.get("min_height", 30))
             
             img_height, img_width = image.size[1], image.size[0]
-            
-            # Extract bounding boxes (ignore confidence scores since they're all 1.0)
-            all_boxes = [bbox for bbox, score in raw_detections_with_scores]
             
             # Apply size filter
             self.progress_signal.emit("Applying size filter...", 20)
@@ -114,9 +114,9 @@ class OCRWorker(QThread):
                 if self.mode == "full":
                     from src.backend.core.extraction import extract_text_with_vision_api
                     text = extract_text_with_vision_api(image, self.config)
-                    self.finished_signal.emit([], [], text or "No text extracted.")
+                    self.finished_signal.emit(all_boxes, [], [], text or "No text extracted.")
                 else:
-                    self.finished_signal.emit([], [], None)
+                    self.finished_signal.emit(all_boxes, [], [], None)
                 return
 
             self.progress_signal.emit(f"Filtered to {len(regions)} text region(s)...", 30)
@@ -181,7 +181,7 @@ class OCRWorker(QThread):
 
             if self.mode == "detection_only":
                 self.progress_signal.emit("Detection Complete", 100)
-                self.finished_signal.emit(regions, merged_boxes_info, None)
+                self.finished_signal.emit(all_boxes, regions, merged_boxes_info, None)
                 return
 
             # 3. Extraction Phase (Full Mode)
@@ -191,7 +191,7 @@ class OCRWorker(QThread):
             if not cropped_images:
                 from src.backend.core.extraction import extract_text_with_vision_api
                 text = extract_text_with_vision_api(image, self.config)
-                self.finished_signal.emit(regions, merged_boxes_info, text or "No text extracted.")
+                self.finished_signal.emit(all_boxes, regions, merged_boxes_info, text or "No text extracted.")
                 return
 
             # 4. Process each region
@@ -214,7 +214,7 @@ class OCRWorker(QThread):
 
             final_text = "\n".join(extracted_texts) if extracted_texts else "No text extracted."
             self.progress_signal.emit("Finalizing...", 100)
-            self.finished_signal.emit(regions, merged_boxes_info, final_text)
+            self.finished_signal.emit(all_boxes, regions, merged_boxes_info, final_text)
 
         except Exception as e:
             import traceback
