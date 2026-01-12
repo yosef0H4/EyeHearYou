@@ -428,9 +428,12 @@ class OCRWindow(QMainWindow):
         ratio_slider.setMinimum(0)
         ratio_slider.setMaximum(100)
         ratio_slider.setValue(int(td_config.get("merge_width_ratio_threshold", 0.3) * 100))
-        ratio_slider.valueChanged.connect(
-            lambda v: self.on_slider_change("merge_width_ratio_threshold", v / 100.0, self.ratio_label, "{:.2f}")
-        )
+        def on_ratio_change(v):
+            val = v / 100.0
+            self.on_slider_change("merge_width_ratio_threshold", val, self.ratio_label, "{:.2f}")
+            self.update_merge_viz()  # Update visualizer when ratio changes
+        
+        ratio_slider.valueChanged.connect(on_ratio_change)
         ratio_slider.sliderReleased.connect(self.save_and_refresh)
         ratio_layout.addWidget(ratio_label_text)
         ratio_layout.addWidget(ratio_slider)
@@ -480,7 +483,8 @@ class OCRWindow(QMainWindow):
             td_config = self.config.get("text_detection", {})
             v_tol = td_config.get("merge_vertical_tolerance", 30)
             h_tol = td_config.get("merge_horizontal_tolerance", 50)
-            self.merge_viz.update_values(v_tol, h_tol)
+            ratio = td_config.get("merge_width_ratio_threshold", 0.3)
+            self.merge_viz.update_values(v_tol, h_tol, ratio)
 
     def update_api_config(self):
         """Update API config from input fields"""
