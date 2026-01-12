@@ -905,6 +905,8 @@ class OCRWindow(QMainWindow):
         if show_tolerance_zones and final_info_list:
             # Draw yellow zones for ALL boxes (even single ones) to show search area
             self.draw_tolerance_zones(final_info_list, force_draw_all=True)
+            # Draw Width Ratio "Anchor Bars" (Cyan) to show alignment strictness
+            self.draw_ratio_bars(final_info_list)
             
         # Draw Merged Result (Blue)
         self.draw_merged_boxes(final_info_list)
@@ -1024,6 +1026,51 @@ class OCRWindow(QMainWindow):
                         float(tol_x2 - tol_x1), float(tol_y2 - tol_y1),
                         pen, brush
                     )
+
+    def draw_ratio_bars(self, merged_boxes_info: List[dict]):
+        """
+        Draw Cyan 'Anchor Bars' inside boxes to visualize width_ratio_threshold.
+        This helps users understand how much vertical alignment/overlap is required.
+        The bar represents the minimum horizontal overlap needed for vertical merging.
+        """
+        ratio = self.config["text_detection"].get("merge_width_ratio_threshold", 0.3)
+        
+        # Cyan pen/brush - semi-transparent for visibility
+        brush = QBrush(QColor(0, 255, 255, 120))  # Cyan, semi-transparent
+        
+        for box_info in merged_boxes_info:
+            # We want to draw this on the ORIGINAL boxes so users see why they are/aren't merging
+            original_boxes = box_info.get("originalBoxes", [])
+            
+            for (x1, y1, x2, y2) in original_boxes:
+                w = x2 - x1
+                h = y2 - y1
+                
+                if w <= 0 or h <= 0:
+                    continue
+                
+                # Calculate the anchor bar width based on ratio
+                # Logic: x_overlap > min_w * ratio
+                # So we visualize this required width in the center of the box
+                bar_w = w * ratio
+                bar_h = 4  # Thin bar
+                
+                # Center it horizontally
+                bar_x = x1 + (w - bar_w) / 2
+                
+                # Draw at bottom (where it would connect to the next line)
+                # Position it slightly above the bottom edge for visibility
+                bar_y = y2 - 6
+                
+                # Make sure bar doesn't go outside the box
+                if bar_y < y1:
+                    bar_y = y1
+                
+                self.scene.addRect(
+                    float(bar_x), float(bar_y), 
+                    float(bar_w), float(bar_h), 
+                    QPen(Qt.PenStyle.NoPen), brush
+                )
 
     def draw_ordering_visualization(self, merged_boxes_info: List[dict]):
         """Draw flow path, guide lines, and order numbers for reading order visualization"""

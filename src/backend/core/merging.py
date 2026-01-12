@@ -55,7 +55,8 @@ def should_merge(box1, box2, v_tol=30, h_tol=50, w_ratio=0.3):
     if v_gap < v_tol:
         # Strict alignment check:
         # Either significant horizontal overlap (stacked text)
-        if x_overlap > (min_w * 0.2):
+        # w_ratio controls how much overlap is needed relative to the smaller box width
+        if x_overlap > (min_w * w_ratio):
             return True
             
         # OR Left-aligned (roughly)
