@@ -372,9 +372,6 @@ class OCRWindow(QMainWindow):
         dim_label = QLabel("Max Dimension:")
         
         current_dim = self.config.get("max_image_dimension", 1080)
-        self.dim_val_label = QLabel("px")
-        self.dim_val_label.setMinimumWidth(30)
-        self.dim_val_label.setStyleSheet("color: #aaa; font-weight: 600;")
         
         dim_slider = QSlider(Qt.Orientation.Horizontal)
         dim_slider.setMinimum(320)
@@ -385,11 +382,12 @@ class OCRWindow(QMainWindow):
         dim_spin.setMinimum(1)  # Only positive numbers
         dim_spin.setMaximum(999999)  # Very high limit, effectively unlimited
         dim_spin.setValue(current_dim)
-        dim_spin.setMaximumWidth(80)
+        dim_spin.setMinimumWidth(100)
+        dim_spin.setMaximumWidth(120)
+        dim_spin.setSuffix(" px")
 
         def on_dim_change(v):
             """Update label and visualizer when dimension changes"""
-            self.dim_val_label.setText("px")
             self.config["max_image_dimension"] = v
             self.resize_viz.update_value(v)
             
@@ -417,7 +415,6 @@ class OCRWindow(QMainWindow):
         dim_layout.addWidget(dim_label)
         dim_layout.addWidget(dim_slider)
         dim_layout.addWidget(dim_spin)
-        dim_layout.addWidget(self.dim_val_label)
         
         g_layout.addLayout(dim_layout)
         
@@ -621,7 +618,8 @@ class OCRWindow(QMainWindow):
         grp_spin.setMinimum(1)
         grp_spin.setMaximum(20)
         grp_spin.setValue(int(sort_config.get("group_tolerance", 0.8) * 10))
-        grp_spin.setMaximumWidth(80)
+        grp_spin.setMinimumWidth(100)
+        grp_spin.setMaximumWidth(120)
         grp_spin.setSuffix(" (×0.1)")
         
         def on_grp_slider_change(v):
