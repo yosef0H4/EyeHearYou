@@ -1,6 +1,6 @@
 """
-Standalone CLI entry point for OCR application
-Captures screenshots on Ctrl+Shift+Alt+Z and extracts text using local H2OVL model
+Standalone CLI entry point for OCR accessibility tool
+Captures screenshots on Ctrl+Shift+Alt+Z, extracts text using local H2OVL model, and reads it aloud
 Uses text detection to only process text regions, improving efficiency
 
 This is the standalone CLI version (without the GUI).
@@ -19,6 +19,8 @@ from .core import (
     detect_text_regions,
 )
 from .core.model_loader import preload_model
+from .core.tts import preload_tts, speak_text, stop_tts_engine
+from .core.detection import preload_rapidocr
 
 
 def process_screenshot():
@@ -36,8 +38,16 @@ def process_screenshot():
     
     print("Detecting text regions...")
     
-    # Extract text using local H2OVL model (with region detection)
-    extracted_text = extract_text_from_regions(screenshot, config)
+    # Clear old audio immediately upon new capture
+    stop_tts_engine()
+    
+    # Define callback for streaming
+    def on_text_stream(text_chunk):
+        print(f"[Stream] {text_chunk[:30]}...")
+        speak_text(text_chunk, clear_queue=False)
+    
+    # Extract text using local H2OVL model (with region detection and streaming)
+    extracted_text = extract_text_from_regions(screenshot, config, on_text_found=on_text_stream)
     
     if extracted_text:
         print("\n" + "-"*60)
@@ -45,6 +55,7 @@ def process_screenshot():
         print("-"*60)
         print(extracted_text)
         print("-"*60)
+        # No need to call speak_text(extracted_text) here, it was streamed!
     else:
         print("Failed to extract text from screenshot.")
 
@@ -85,10 +96,16 @@ def main():
     config = load_config()
     
     print("Model: H2OVL-Mississippi-0.8B (Local)")
-    print("\nPreloading model (this may take a moment on first run)...")
+    print("\nPreloading models (this may take a moment on first run)...")
     
-    # Preload and test the model
+    # Preload and test RapidOCR
+    preload_rapidocr(test=True)
+    
+    # Preload and test the OCR model
     preload_model(test=True)
+    
+    # Preload and test the TTS model
+    preload_tts(test=True)
     
     print("\nHotkeys:")
     print("  Ctrl+Shift+Alt+Z : Capture + Extract Text")

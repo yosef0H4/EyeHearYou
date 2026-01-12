@@ -1,7 +1,7 @@
 [project]
 name = "visual-novel-ocr"
 version = "0.1.0"
-description = "Lightweight OCR tool for visual novels and games - one-key text extraction with AI-powered OCR. Press Ctrl+Shift+Alt+Z to capture, detect, extract, and copy text to clipboard automatically."
+description = "Accessibility OCR tool that reads text aloud - one-key text extraction with AI-powered OCR and automatic text-to-speech. Press Ctrl+Shift+Alt+Z to capture, detect, extract, and read text aloud automatically. Perfect for users who cannot read text on screen."
 requires-python = ">=3.12"
 dependencies = [
     "gitignore-parser>=0.1.0",
@@ -11,8 +11,6 @@ dependencies = [
     "pillow>=12.1.0",
     "rapidocr-onnxruntime",
     "pygetwindow>=0.0.9",
-    "pyperclip>=1.8.2",
-    "pywin32>=306; sys_platform == 'win32'",  # win32clipboard for Windows clipboard fallback
     "pyqt6",
     "streamlit>=1.52.2",
     # H2OVL-Mississippi dependencies (non-torch dependencies only)

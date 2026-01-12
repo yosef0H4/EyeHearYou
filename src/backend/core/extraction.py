@@ -60,10 +60,16 @@ def extract_text_with_local_model(image, config):
 extract_text_with_vision_api = extract_text_with_local_model
 
 
-def extract_text_from_regions(full_image, config):
+def extract_text_from_regions(full_image, config, on_text_found=None):
     """
     Extract text by first detecting text regions, then processing only those regions with the local model.
     This is more efficient than processing the full image.
+    
+    Args:
+        full_image: The PIL Image
+        config: Config dict
+        on_text_found: Optional callback(text) that runs immediately when a region is processed.
+                       Used for streaming text to TTS.
     """
     # 1. Detection Phase
     task_manager.emit_status("Detecting text regions...", progress=10)
@@ -88,7 +94,10 @@ def extract_text_from_regions(full_image, config):
         # Fallback: if detection fails or no regions found, use full image
         task_manager.emit_status("No regions found, processing full image...", progress=20)
         print("No text regions detected or detection unavailable, using full image...")
-        return extract_text_with_local_model(full_image, config)
+        text = extract_text_with_local_model(full_image, config)
+        if text and on_text_found:
+            on_text_found(text)
+        return text
     
     print(f"Detected {len(text_regions)} text region(s), processing individually...")
     task_manager.emit_status(f"Detected {len(text_regions)} text region(s), processing individually...", progress=15)
@@ -115,7 +124,10 @@ def extract_text_from_regions(full_image, config):
     cropped_images = crop_text_regions(full_image, text_regions)
     if not cropped_images:
         print("No valid text regions to process, using full image...")
-        return extract_text_with_local_model(full_image, config)
+        text = extract_text_with_local_model(full_image, config)
+        if text and on_text_found:
+            on_text_found(text)
+        return text
     
     # Save debug images (merged boxes in blue, original boxes in green)
     save_debug_images(full_image, text_regions, cropped_images, is_merged=is_merged)
@@ -141,7 +153,13 @@ def extract_text_from_regions(full_image, config):
         text = model.predict(cropped_img)
         
         if text and text.strip():
-            all_texts.append(text.strip())
+            clean_text = text.strip()
+            all_texts.append(clean_text)
+            
+            # --- CRITICAL CHANGE: Stream result immediately ---
+            if on_text_found:
+                on_text_found(clean_text)
+            # --------------------------------------------------
     
     task_manager.emit_status("Finalizing...", progress=100)
     

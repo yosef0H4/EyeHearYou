@@ -5,7 +5,7 @@ from .core.capture import capture_screenshot
 from .core.config import load_config
 from .core.extraction import extract_text_from_regions
 from .core.task_manager import task_manager
-from .core.tts import speak_text
+from .core.tts import speak_text, stop_tts_engine
 from .state import state
 
 
@@ -18,43 +18,8 @@ except ImportError:
     keyboard = None
 
 
-def copy_to_clipboard(text: str) -> bool:
-    """Copy text to clipboard (cross-platform)"""
-    try:
-        import pyperclip
-        pyperclip.copy(text)
-        return True
-    except ImportError:
-        # Fallback for Windows
-        try:
-            import win32clipboard
-            win32clipboard.OpenClipboard()
-            win32clipboard.EmptyClipboard()
-            win32clipboard.SetClipboardText(text)
-            win32clipboard.CloseClipboard()
-            return True
-        except ImportError:
-            # Fallback: try subprocess (works on most systems)
-            try:
-                import subprocess
-                import sys
-                if sys.platform == "darwin":  # macOS
-                    subprocess.run(["pbcopy"], input=text.encode(), check=True)
-                elif sys.platform == "linux":  # Linux
-                    subprocess.run(["xclip", "-selection", "clipboard"], input=text.encode(), check=True)
-                else:  # Windows fallback
-                    subprocess.run(["clip"], input=text.encode(), check=True)
-                return True
-            except Exception:
-                print("[Hotkey] Warning: Could not copy to clipboard. Install pyperclip: pip install pyperclip")
-                return False
-    except Exception as e:
-        print(f"[Hotkey] Error copying to clipboard: {e}")
-        return False
-
-
 def capture_and_update_state():
-    """Capture screenshot, run detection+OCR, and copy to clipboard (called by hotkey)"""
+    """Capture screenshot, run detection+OCR, and read aloud (called by hotkey)"""
     # 1. Cancel any existing tasks immediately
     task_manager.start_task("Hotkey Capture")
     
@@ -70,6 +35,9 @@ def capture_and_update_state():
             state.reset_detections()
             state.screenshot_version += 1
             
+            # Clear old audio immediately upon new capture
+            stop_tts_engine()
+            
             # Notify SSE listeners about the new image
             state.screenshot_queue.put({
                 "type": "screenshot",
@@ -84,8 +52,18 @@ def capture_and_update_state():
             try:
                 print("[Hotkey] Running detection and OCR...")
                 config = load_config()
-                # extract_text_from_regions now handles status updates internally
-                extracted_text = extract_text_from_regions(screenshot, config)
+                
+                # Define callback for streaming
+                def on_text_stream(text_chunk):
+                    print(f"[Hotkey] Streamed: {text_chunk[:30]}...")
+                    speak_text(text_chunk, clear_queue=False)
+
+                # Run extraction with callback
+                extracted_text = extract_text_from_regions(
+                    screenshot, 
+                    config, 
+                    on_text_found=on_text_stream
+                )
                 
                 if task_manager.is_cancelled():
                     print("[Hotkey] Task cancelled.")
@@ -96,19 +74,10 @@ def capture_and_update_state():
                     # Store result in state for UI
                     state.last_extracted_text = extracted_text
                     state.last_extraction_version = state.screenshot_version
-                    
-                    # Copy to clipboard
-                    if copy_to_clipboard(extracted_text):
-                        msg = f"✅ Text extracted and copied to clipboard ({len(extracted_text)} chars)"
-                        print(f"[Hotkey] {msg}")
-                        task_manager.emit_status(f"Copied {len(extracted_text)} chars", is_loading=False, progress=100)
-                    else:
-                        msg = f"✅ Text extracted ({len(extracted_text)} chars) but clipboard copy failed"
-                        print(f"[Hotkey] {msg}")
-                        task_manager.emit_status("Extracted (Clipboard failed)", is_loading=False, progress=100)
-                    
-                    # Trigger TTS (runs in background)
-                    speak_text(extracted_text)
+                    # No need to call speak_text(extracted_text) here, it was streamed!
+                    msg = f"✅ Text extracted ({len(extracted_text)} chars) and sent to TTS"
+                    print(f"[Hotkey] {msg}")
+                    task_manager.emit_status(f"Reading {len(extracted_text)} chars...", is_loading=False, progress=100)
                     
                     # Also print to console for visibility
                     print("\n" + "="*60)

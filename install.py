@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Installation script for Visual Novel OCR Tool
+Installation script for OCR Accessibility Tool
 Replaces install-gpu.bat and install-cpu.bat with a cross-platform Python script
 
 Usage:
@@ -344,7 +344,7 @@ else:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Install dependencies for Visual Novel OCR Tool",
+        description="Install dependencies for OCR Accessibility Tool",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -367,7 +367,7 @@ Examples:
     args = parser.parse_args()
     
     print("="*60)
-    print("Visual Novel OCR Tool - Installation Script")
+    print("OCR Accessibility Tool - Installation Script")
     print("="*60)
     print()
     

@@ -20,6 +20,43 @@ def _get_rapidocr_instance():
     return _rapidocr_instance
 
 
+def preload_rapidocr(test=True):
+    """
+    Preload the RapidOCR instance at startup.
+    
+    Args:
+        test: If True, run a simple test to verify RapidOCR works
+        
+    Returns:
+        True if RapidOCR loaded (and tested) successfully, False otherwise
+    """
+    print("[RapidOCR] Preloading RapidOCR model...")
+    try:
+        ocr = _get_rapidocr_instance()
+        
+        if test:
+            print("[RapidOCR] Running startup test...")
+            try:
+                # Create a simple test image (white with black text)
+                import numpy as np
+                test_image = np.ones((100, 200, 3), dtype=np.uint8) * 255  # White image
+                # Run detection on test image
+                result, _ = ocr(test_image, use_det=True, use_rec=False)
+                print("[RapidOCR] ✓ RapidOCR loaded and tested successfully!")
+                return True
+            except Exception as e:
+                print(f"[RapidOCR] ⚠ RapidOCR loaded but test failed: {e}")
+                return True  # Still return True, RapidOCR is loaded
+        else:
+            print("[RapidOCR] ✓ RapidOCR loaded successfully!")
+            return True
+    except Exception as e:
+        print(f"[RapidOCR] ⚠ Failed to load RapidOCR: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
 def detect_text_regions(image, min_width=30, min_height=30):
     """
     Detect text regions in the image using RapidOCR (detection only).

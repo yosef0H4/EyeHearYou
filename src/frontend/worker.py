@@ -8,6 +8,7 @@ from src.backend.core.filtering import filter_text_regions, sort_text_regions_by
 from src.backend.core.extraction import crop_text_regions
 from src.backend.core.preprocessing import process_image
 from src.backend.state import state
+from src.backend.core.tts import speak_text, stop_tts_engine
 
 
 class OCRWorker(QThread):
@@ -191,10 +192,16 @@ class OCRWorker(QThread):
             if not cropped_images:
                 from src.backend.core.extraction import extract_text_with_vision_api
                 text = extract_text_with_vision_api(image, self.config)
+                if text:
+                    speak_text(text, clear_queue=True)  # Speak immediately
                 self.finished_signal.emit(all_boxes, regions, merged_boxes_info, text or "No text extracted.")
                 return
 
-            # 4. Process each region
+            # Clear TTS queue before starting a new batch of regions
+            # This stops any old audio from previous screenshots
+            stop_tts_engine()
+
+            # 4. Process each region with streaming
             extracted_texts = []
             total = len(cropped_images)
 
@@ -209,11 +216,18 @@ class OCRWorker(QThread):
 
                 from src.backend.core.extraction import extract_text_with_vision_api
                 text = extract_text_with_vision_api(crop, self.config)
+                
                 if text and text.strip():
-                    extracted_texts.append(text.strip())
+                    clean_text = text.strip()
+                    extracted_texts.append(clean_text)
+                    
+                    # STREAMING: Speak this specific box immediately
+                    # We don't clear_queue here because we want to append to the stream
+                    speak_text(clean_text, clear_queue=False)
 
             final_text = "\n".join(extracted_texts) if extracted_texts else "No text extracted."
             self.progress_signal.emit("Finalizing...", 100)
+            # We don't trigger speak_text(final_text) here because we already streamed it!
             self.finished_signal.emit(all_boxes, regions, merged_boxes_info, final_text)
 
         except Exception as e:
@@ -223,4 +237,6 @@ class OCRWorker(QThread):
 
     def cancel(self):
         self.is_cancelled = True
+        # Also stop TTS if we cancel OCR
+        stop_tts_engine()
 

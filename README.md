@@ -1,11 +1,11 @@
-# Visual Novel OCR Tool
+# OCR Accessibility Tool
 
-A lightweight Python application for extracting text from visual novels and games. Press `Ctrl+Shift+Alt+Z` anywhere to capture the active window, automatically detect text regions, extract text using AI, copy it to your clipboard, and read it aloud using Kokoro TTS. Perfect for reading visual novels in foreign languages or extracting dialogue from games.
+A Python application that reads text aloud from your screen. Press `Ctrl+Shift+Alt+Z` anywhere to capture the active window, automatically detect text regions, extract text using AI, and read it aloud using Kokoro TTS. Perfect for users who cannot read text on screen - an accessibility tool that makes digital content accessible through voice.
 
 ## Features
 
-- **One-Key Extraction**: Press `Ctrl+Shift+Alt+Z` to automatically capture, detect, extract, copy to clipboard, and read text aloud
-- **Text-to-Speech**: Automatically reads extracted text using Kokoro TTS (82M parameter, Apache-licensed model)
+- **One-Key Reading**: Press `Ctrl+Shift+Alt+Z` to automatically capture, detect, extract, and read text aloud
+- **Text-to-Speech**: Always enabled - automatically reads extracted text using Kokoro TTS (82M parameter, Apache-licensed model)
 - **Desktop GUI**: Visual interface to fine-tune detection and merge settings with live preview
 - **Backend-Authoritative**: All detection/merging logic runs in Python for consistency between preview and extraction
 - **Smart Text Detection**: Uses RapidOCR to detect text regions, then processes only cropped regions with the local H2OVL model (faster and more accurate)
@@ -85,7 +85,6 @@ The application creates a `config.json` file automatically. You can edit this fi
         "merge_width_ratio_threshold": 0.3
     },
     "tts": {
-        "enabled": true,
         "voice": "af_heart",
         "speed": 1.0
     }
@@ -96,8 +95,7 @@ The application creates a `config.json` file automatically. You can edit this fi
 - **max_image_dimension**: Downscales large images to fit model context (default: 1080)
 - **preprocessing**: Image adjustments before detection (useful for difficult backgrounds)
 - **text_detection**: Controls how text is detected and merged into lines
-- **tts**: Text-to-Speech settings
-  - **enabled**: Enable/disable TTS (default: true)
+- **tts**: Text-to-Speech settings (TTS is always enabled)
   - **voice**: Kokoro voice ID (default: "af_heart")
   - **speed**: Speech speed multiplier (default: 1.0, range: 0.5-2.0)
 
@@ -111,13 +109,12 @@ The PyQt6 GUI provides instant feedback, real progress bars, and zero latency:
 uv run python run_gui.py
 ```
 
-**Press `Ctrl+Shift+Alt+Z`** while playing a visual novel - that's it! Text is automatically:
+**Press `Ctrl+Shift+Alt+Z`** anywhere on your screen - that's it! Text is automatically:
 - Captured from the active window
 - Detected using RapidOCR
 - Merged into complete dialogue lines
 - Extracted using AI
-- **Copied to your clipboard**
-- **Read aloud using Kokoro TTS** (if enabled in config)
+- **Read aloud using Kokoro TTS** (always enabled)
 
 The UI automatically updates to show detection boxes and extracted text. You only need to use the UI buttons if you want to tune settings for better detection.
 
@@ -153,24 +150,24 @@ uv run python run_gui.py
 - Hotkey support: Press `Ctrl+Shift+Alt+Z` anywhere
 
 **Workflow:**
-1. **Quick Start**: Just press `Ctrl+Shift+Alt+Z` while playing a visual novel - text is automatically extracted, copied to clipboard, and read aloud!
-2. **Tune Settings** (optional): Use the UI to adjust detection sensitivity, merge tolerances, and TTS settings
+1. **Quick Start**: Just press `Ctrl+Shift+Alt+Z` anywhere on your screen - text is automatically extracted and read aloud!
+2. **Tune Settings** (optional): Use the UI to adjust detection sensitivity, merge tolerances, and TTS speed
    - Red boxes show detected text regions
    - Blue boxes show merged dialogue lines
-   - TTS panel: Enable/disable text-to-speech and adjust speed
-   - Adjust sliders to fine-tune for your game/visual novel
+   - TTS panel: Adjust speech speed (TTS is always enabled)
+   - Adjust sliders to fine-tune for your content
 3. **Manual Mode** (optional): Click "New Screenshot" and "Run Detection" if you want to manually test settings
 4. The UI automatically shows results from hotkey captures - no need to press buttons unless re-tuning settings
 
 ### Standalone CLI (No UI)
 
-For headless operation without the web UI:
+For headless operation without the GUI:
 
 ```bash
 uv run python -m src.backend.cli
 ```
 
-This runs the same hotkey functionality but prints results to console instead of updating a UI. Useful for automation or when you don't need the visual interface.
+This runs the same hotkey functionality but prints results to console instead of updating a UI. Text is still automatically read aloud. Useful when you don't need the visual interface.
 
 **Note**: The desktop GUI mode (`run_gui.py`) is recommended as it provides visual feedback and allows you to tune settings easily.
 
@@ -186,7 +183,7 @@ This runs the same hotkey functionality but prints results to console instead of
 - **Windows**: The `keyboard` library requires administrator privileges for global hotkeys
 - **Screenshot**: Captures only the active window (not the full screen)
 - **Local Processing**: All OCR processing happens locally - no internet connection or API keys required
-- **Clipboard**: Requires `pyperclip` package (included in dependencies) or falls back to system-specific methods
+- **Accessibility Focus**: This tool is designed to help users who cannot read text on screen - text is always read aloud automatically
 
 ## Troubleshooting
 
@@ -200,8 +197,7 @@ This runs the same hotkey functionality but prints results to console instead of
 - TTS model loads on first use - subsequent uses are faster
 
 ### TTS not working
-- Make sure TTS is enabled in config.json: `"tts": {"enabled": true}`
-- Check console for TTS messages - first load may take a minute
+- TTS is always enabled - check console for TTS messages - first load may take a minute
 - Verify Kokoro is installed: `uv pip list | grep kokoro`
 - If you're using PyTorch 2.7.0 and see torchvision errors, enable the patch: `set TORCHVISION_PATCH=1` (Windows) or `export TORCHVISION_PATCH=1` (Linux/Mac) before running
 

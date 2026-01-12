@@ -20,7 +20,7 @@ from src.backend.core.merging import merge_close_text_boxes
 from src.frontend.widgets import UnifiedSettingsViz, ResizeVizWidget
 from src.frontend.worker import OCRWorker
 from src.frontend.theme import DARK_THEME_STYLESHEET
-from src.frontend.constants import KEYBOARD_AVAILABLE, CLIPBOARD_AVAILABLE, keyboard, pyperclip
+from src.frontend.constants import KEYBOARD_AVAILABLE, keyboard
 
 
 class OCRWindow(QMainWindow):
@@ -49,7 +49,7 @@ class OCRWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Visual Novel OCR - Settings Tuner")
+        self.setWindowTitle("OCR Accessibility Tool - Settings Tuner")
         self.resize(1400, 950)
         self.config = load_config()
         self.worker: Optional[OCRWorker] = None
@@ -685,24 +685,10 @@ class OCRWindow(QMainWindow):
         g_layout = QVBoxLayout()
         tts_config = self.config.get("tts", {})
 
-        # Enable Checkbox
-        row1 = QHBoxLayout()
-        chk_enable = QComboBox()
-        chk_enable.addItem("Disabled", False)
-        chk_enable.addItem("Enabled (Read Aloud)", True)
-        is_enabled = tts_config.get("enabled", False)
-        chk_enable.setCurrentIndex(1 if is_enabled else 0)
-
-        def on_enable(idx):
-            val = chk_enable.currentData()
-            if "tts" not in self.config: self.config["tts"] = {}
-            self.config["tts"]["enabled"] = val
-            self.save_config()
-
-        chk_enable.currentIndexChanged.connect(on_enable)
-        row1.addWidget(QLabel("Status:"))
-        row1.addWidget(chk_enable)
-        g_layout.addLayout(row1)
+        # Info label (TTS is always enabled)
+        info_label = QLabel("TTS is always enabled - text will be read aloud automatically")
+        info_label.setStyleSheet("color: #4CAF50; font-style: italic; padding: 5px;")
+        g_layout.addWidget(info_label)
 
         # Speed Slider
         row2 = QHBoxLayout()
@@ -1324,19 +1310,8 @@ class OCRWindow(QMainWindow):
         # Update text output
         if text:
             self.text_output.setText(text)
-            # Copy to clipboard
-            if CLIPBOARD_AVAILABLE:
-                try:
-                    pyperclip.copy(text)
-                    self.status_label.setText(f"Done! Text copied to clipboard ({len(text)} chars)")
-                except Exception as e:
-                    self.status_label.setText(f"Done! (Clipboard error: {e})")
-            else:
-                self.status_label.setText("Done! (Clipboard not available)")
-            
-            # Trigger TTS
-            from src.backend.core.tts import speak_text
-            speak_text(text)
+            # TTS was already streamed during extraction, no need to call it again
+            self.status_label.setText(f"Done! Reading {len(text)} chars aloud...")
         else:
             self.status_label.setText("Detection complete (no text extracted)")
 

@@ -16,7 +16,6 @@ def load_config():
                 # Merge in missing TTS config if it doesn't exist (for backward compatibility)
                 if "tts" not in config:
                     config["tts"] = {
-                        "enabled": True,  # Enable by default
                         "voice": "af_heart",
                         "speed": 1.0
                     }
@@ -24,9 +23,13 @@ def load_config():
                     with open(CONFIG_FILE, "w", encoding="utf-8") as f:
                         json.dump(config, f, indent=4)
                 else:
-                    # Ensure all TTS fields exist
-                    tts_defaults = {"enabled": True, "voice": "af_heart", "speed": 1.0}
+                    # Ensure all TTS fields exist (remove "enabled" if present, it's no longer used)
+                    tts_defaults = {"voice": "af_heart", "speed": 1.0}
                     updated = False
+                    # Remove "enabled" if it exists (backward compatibility)
+                    if "enabled" in config["tts"]:
+                        del config["tts"]["enabled"]
+                        updated = True
                     for key, default_value in tts_defaults.items():
                         if key not in config["tts"]:
                             config["tts"][key] = default_value
@@ -52,7 +55,6 @@ def load_config():
                 "brightness": 0           # -100 to 100
             },
             "tts": {
-                "enabled": True,          # Enable TTS by default
                 "voice": "af_heart",      # Kokoro voice ID
                 "speed": 1.0              # 0.5 - 2.0
             },
