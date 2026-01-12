@@ -5,6 +5,7 @@ description = "Lightweight OCR tool for visual novels and games - one-key text e
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.104.0",
+    "gitignore-parser>=0.1.0",
     "keyboard>=0.13.5",
     "numpy>=1.24.0",
     "opencv-python>=4.8.0",
