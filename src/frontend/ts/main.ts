@@ -9,6 +9,8 @@ import { ExtractionResponse } from './types.js';
 let imageViewer: ImageViewer | undefined;
 let sseManager: SSEManager | undefined;
 let previewAbortController: AbortController | null = null;  // For canceling in-flight preview requests
+let autoSaveTimeout: number | null = null;  // For debouncing auto-save
+let previewRefreshTimeout: number | null = null;  // For debouncing preview refresh from text inputs
 
 // Initialize on page load
 window.addEventListener('DOMContentLoaded', async () => {
@@ -68,35 +70,52 @@ function setupEventListeners(): void {
     const minHeightTextInput = document.getElementById('min_height_input') as HTMLInputElement;
     
     // Update visualizers on input (no server call)
-    if (minConfInput) minConfInput.addEventListener('input', updatePaddleViz);
+    if (minConfInput) {
+        minConfInput.addEventListener('input', () => {
+            updatePaddleViz();
+            autoSaveConfig();  // Auto-save on change
+        });
+    }
     
     // Sync min width slider and text input
     if (minWidthInput && minWidthTextInput) {
         minWidthInput.addEventListener('input', () => {
             minWidthTextInput.value = minWidthInput.value;
             updatePaddleViz();
+            autoSaveConfig();  // Auto-save on change
         });
         minWidthInput.addEventListener('change', () => {
+            autoSaveConfig();  // Save on release
             refreshPreview(false);  // On release, refresh preview
         });
         minWidthInput.addEventListener('pointerup', () => {
+            autoSaveConfig();  // Save on release
             refreshPreview(false);  // On release, refresh preview
         });
         minWidthTextInput.addEventListener('input', () => {
             const value = parseInt(minWidthTextInput.value) || 5;
-            const clampedValue = Math.max(5, Math.min(1000, value));
-            minWidthInput.value = String(clampedValue);
-            if (minWidthTextInput.value !== String(clampedValue)) {
-                minWidthTextInput.value = String(clampedValue);
+            const minValue = Math.max(5, value);
+            // Clamp slider to 300, but allow text input to go higher
+            const sliderValue = Math.min(300, minValue);
+            minWidthInput.value = String(sliderValue);
+            // Don't clamp text input - allow values > 300
+            if (minWidthTextInput.value !== String(minValue) && minValue >= 5) {
+                minWidthTextInput.value = String(minValue);
             }
             updatePaddleViz();
+            autoSaveConfig();  // Auto-save on change
+            debouncedPreviewRefresh();  // Live preview update
         });
         minWidthTextInput.addEventListener('blur', () => {
             const value = parseInt(minWidthTextInput.value) || 5;
-            const clampedValue = Math.max(5, Math.min(1000, value));
-            minWidthInput.value = String(clampedValue);
-            minWidthTextInput.value = String(clampedValue);
+            const minValue = Math.max(5, value);
+            // Clamp slider to 300, but allow text input to go higher
+            const sliderValue = Math.min(300, minValue);
+            minWidthInput.value = String(sliderValue);
+            // Don't clamp text input - allow values > 300
+            minWidthTextInput.value = String(minValue);
             updatePaddleViz();
+            autoSaveConfig();  // Save on blur
             refreshPreview(false);  // On blur, refresh preview
         });
     }
@@ -106,28 +125,40 @@ function setupEventListeners(): void {
         minHeightInput.addEventListener('input', () => {
             minHeightTextInput.value = minHeightInput.value;
             updatePaddleViz();
+            autoSaveConfig();  // Auto-save on change
         });
         minHeightInput.addEventListener('change', () => {
+            autoSaveConfig();  // Save on release
             refreshPreview(false);  // On release, refresh preview
         });
         minHeightInput.addEventListener('pointerup', () => {
+            autoSaveConfig();  // Save on release
             refreshPreview(false);  // On release, refresh preview
         });
         minHeightTextInput.addEventListener('input', () => {
             const value = parseInt(minHeightTextInput.value) || 5;
-            const clampedValue = Math.max(5, Math.min(1000, value));
-            minHeightInput.value = String(clampedValue);
-            if (minHeightTextInput.value !== String(clampedValue)) {
-                minHeightTextInput.value = String(clampedValue);
+            const minValue = Math.max(5, value);
+            // Clamp slider to 300, but allow text input to go higher
+            const sliderValue = Math.min(300, minValue);
+            minHeightInput.value = String(sliderValue);
+            // Don't clamp text input - allow values > 300
+            if (minHeightTextInput.value !== String(minValue) && minValue >= 5) {
+                minHeightTextInput.value = String(minValue);
             }
             updatePaddleViz();
+            autoSaveConfig();  // Auto-save on change
+            debouncedPreviewRefresh();  // Live preview update
         });
         minHeightTextInput.addEventListener('blur', () => {
             const value = parseInt(minHeightTextInput.value) || 5;
-            const clampedValue = Math.max(5, Math.min(1000, value));
-            minHeightInput.value = String(clampedValue);
-            minHeightTextInput.value = String(clampedValue);
+            const minValue = Math.max(5, value);
+            // Clamp slider to 300, but allow text input to go higher
+            const sliderValue = Math.min(300, minValue);
+            minHeightInput.value = String(sliderValue);
+            // Don't clamp text input - allow values > 300
+            minHeightTextInput.value = String(minValue);
             updatePaddleViz();
+            autoSaveConfig();  // Save on blur
             refreshPreview(false);  // On blur, refresh preview
         });
     }
@@ -144,28 +175,40 @@ function setupEventListeners(): void {
         vTolInput.addEventListener('input', () => {
             vTolTextInput.value = vTolInput.value;
             updateMergeViz();
+            autoSaveConfig();  // Auto-save on change
         });
         vTolInput.addEventListener('change', () => {
+            autoSaveConfig();  // Save on release
             refreshPreview(false);  // On release, refresh preview
         });
         vTolInput.addEventListener('pointerup', () => {
+            autoSaveConfig();  // Save on release
             refreshPreview(false);  // On release, refresh preview
         });
         vTolTextInput.addEventListener('input', () => {
             const value = parseInt(vTolTextInput.value) || 0;
-            const clampedValue = Math.max(0, Math.min(1000, value));
-            vTolInput.value = String(clampedValue);
-            if (vTolTextInput.value !== String(clampedValue)) {
-                vTolTextInput.value = String(clampedValue);
+            const minValue = Math.max(0, value);
+            // Clamp slider to 300, but allow text input to go higher
+            const sliderValue = Math.min(300, minValue);
+            vTolInput.value = String(sliderValue);
+            // Don't clamp text input - allow values > 300
+            if (vTolTextInput.value !== String(minValue) && minValue >= 0) {
+                vTolTextInput.value = String(minValue);
             }
             updateMergeViz();
+            autoSaveConfig();  // Auto-save on change
+            debouncedPreviewRefresh();  // Live preview update
         });
         vTolTextInput.addEventListener('blur', () => {
             const value = parseInt(vTolTextInput.value) || 0;
-            const clampedValue = Math.max(0, Math.min(1000, value));
-            vTolInput.value = String(clampedValue);
-            vTolTextInput.value = String(clampedValue);
+            const minValue = Math.max(0, value);
+            // Clamp slider to 300, but allow text input to go higher
+            const sliderValue = Math.min(300, minValue);
+            vTolInput.value = String(sliderValue);
+            // Don't clamp text input - allow values > 300
+            vTolTextInput.value = String(minValue);
             updateMergeViz();
+            autoSaveConfig();  // Save on blur
             refreshPreview(false);  // On blur, refresh preview
         });
     }
@@ -175,28 +218,40 @@ function setupEventListeners(): void {
         hTolInput.addEventListener('input', () => {
             hTolTextInput.value = hTolInput.value;
             updateMergeViz();
+            autoSaveConfig();  // Auto-save on change
         });
         hTolInput.addEventListener('change', () => {
+            autoSaveConfig();  // Save on release
             refreshPreview(false);  // On release, refresh preview
         });
         hTolInput.addEventListener('pointerup', () => {
+            autoSaveConfig();  // Save on release
             refreshPreview(false);  // On release, refresh preview
         });
         hTolTextInput.addEventListener('input', () => {
             const value = parseInt(hTolTextInput.value) || 0;
-            const clampedValue = Math.max(0, Math.min(1000, value));
-            hTolInput.value = String(clampedValue);
-            if (hTolTextInput.value !== String(clampedValue)) {
-                hTolTextInput.value = String(clampedValue);
+            const minValue = Math.max(0, value);
+            // Clamp slider to 300, but allow text input to go higher
+            const sliderValue = Math.min(300, minValue);
+            hTolInput.value = String(sliderValue);
+            // Don't clamp text input - allow values > 300
+            if (hTolTextInput.value !== String(minValue) && minValue >= 0) {
+                hTolTextInput.value = String(minValue);
             }
             updateMergeViz();
+            autoSaveConfig();  // Auto-save on change
+            debouncedPreviewRefresh();  // Live preview update
         });
         hTolTextInput.addEventListener('blur', () => {
             const value = parseInt(hTolTextInput.value) || 0;
-            const clampedValue = Math.max(0, Math.min(1000, value));
-            hTolInput.value = String(clampedValue);
-            hTolTextInput.value = String(clampedValue);
+            const minValue = Math.max(0, value);
+            // Clamp slider to 300, but allow text input to go higher
+            const sliderValue = Math.min(300, minValue);
+            hTolInput.value = String(sliderValue);
+            // Don't clamp text input - allow values > 300
+            hTolTextInput.value = String(minValue);
             updateMergeViz();
+            autoSaveConfig();  // Save on blur
             refreshPreview(false);  // On blur, refresh preview
         });
     }
@@ -204,11 +259,14 @@ function setupEventListeners(): void {
     if (wRatioInput) {
         wRatioInput.addEventListener('input', () => {
             updateMergeViz();
+            autoSaveConfig();  // Auto-save on change
         });
         wRatioInput.addEventListener('change', () => {
+            autoSaveConfig();  // Save on release
             refreshPreview(false);  // On release, refresh preview
         });
         wRatioInput.addEventListener('pointerup', () => {
+            autoSaveConfig();  // Save on release
             refreshPreview(false);  // On release, refresh preview
         });
     }
@@ -216,11 +274,31 @@ function setupEventListeners(): void {
     // Min confidence also triggers preview refresh on release
     if (minConfInput) {
         minConfInput.addEventListener('change', () => {
+            autoSaveConfig();  // Save on release
             refreshPreview(false);  // On release, refresh preview (uses cached scores)
         });
         minConfInput.addEventListener('pointerup', () => {
+            autoSaveConfig();  // Save on release
             refreshPreview(false);  // On release, refresh preview
         });
+    }
+    
+    // API settings also auto-save
+    const apiUrlInput = document.getElementById('api_url') as HTMLInputElement;
+    const apiKeyInput = document.getElementById('api_key') as HTMLInputElement;
+    const modelInput = document.getElementById('model') as HTMLInputElement;
+    
+    if (apiUrlInput) {
+        apiUrlInput.addEventListener('blur', () => autoSaveConfig());
+        apiUrlInput.addEventListener('change', () => autoSaveConfig());
+    }
+    if (apiKeyInput) {
+        apiKeyInput.addEventListener('blur', () => autoSaveConfig());
+        apiKeyInput.addEventListener('change', () => autoSaveConfig());
+    }
+    if (modelInput) {
+        modelInput.addEventListener('blur', () => autoSaveConfig());
+        modelInput.addEventListener('change', () => autoSaveConfig());
     }
     
     // Action buttons
@@ -245,16 +323,53 @@ async function handleSaveConfig(): Promise<void> {
     try {
         const config = getConfigFromInputs();
         const success = await saveConfig(config);
-        if (outputText) {
-            outputText.innerText = success 
-                ? '✅ Config saved successfully!' 
-                : '❌ Error saving config';
+        if (outputText && !success) {
+            outputText.innerText = '❌ Error saving config';
         }
+        // Don't show success message for auto-save to avoid spam
     } catch (e) {
         if (outputText) {
             outputText.innerText = '❌ Error saving config: ' + (e as Error).message;
         }
     }
+}
+
+/**
+ * Auto-save config to config.json whenever settings change
+ * Debounced to avoid saving on every input event
+ */
+function autoSaveConfig(): void {
+    // Clear existing timeout
+    if (autoSaveTimeout !== null) {
+        clearTimeout(autoSaveTimeout);
+    }
+    
+    // Debounce: save 500ms after last change
+    autoSaveTimeout = window.setTimeout(async () => {
+        try {
+            const config = getConfigFromInputs();
+            await saveConfig(config);
+            console.log('Config auto-saved');
+        } catch (e) {
+            console.error('Error auto-saving config:', e);
+        }
+    }, 500);
+}
+
+/**
+ * Debounced preview refresh for text inputs
+ * Updates preview after user stops typing for a moment
+ */
+function debouncedPreviewRefresh(): void {
+    // Clear existing timeout
+    if (previewRefreshTimeout !== null) {
+        clearTimeout(previewRefreshTimeout);
+    }
+    
+    // Debounce: refresh 800ms after last change (slightly longer than auto-save)
+    previewRefreshTimeout = window.setTimeout(() => {
+        refreshPreview(false);
+    }, 800);
 }
 
 async function handleCapture(): Promise<void> {

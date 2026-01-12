@@ -1,15 +1,18 @@
-# Screenshot OCR Application
+# Visual Novel OCR Tool
 
-A Python application that captures screenshots on hotkey press (Ctrl+Shift+Alt+Z) and extracts text using OpenAI Vision API. Compatible with LM Studio and any OpenAI-compatible API.
+A lightweight Python application for extracting text from visual novels and games. Press `Ctrl+Shift+Alt+Z` anywhere to capture the active window, automatically detect text regions, extract text using AI, and copy it to your clipboard. Perfect for reading visual novels in foreign languages or extracting dialogue from games.
 
 ## Features
 
-- **Global Hotkey**: Press `Ctrl+Shift+Alt+Z` to capture active window and extract text
-- **OpenAI Vision API**: Uses Vision API for accurate text extraction
-- **Cost-Effective**: Detects text regions first, then sends only cropped regions to API (reduces costs significantly)
-- **GPU Support**: Automatically uses GPU for text detection if available (PaddleOCR)
-- **Configurable**: Customize API URL, key, and model via `config.json`
-- **LM Studio Compatible**: Works out of the box with LM Studio
+- **One-Key Extraction**: Press `Ctrl+Shift+Alt+Z` to automatically capture, detect, extract, and copy text to clipboard
+- **Web UI for Tuning**: Visual interface to fine-tune detection and merge settings with live preview
+- **Backend-Authoritative**: All detection/merging logic runs in Python for consistency between preview and extraction
+- **Smart Text Detection**: Uses PaddleOCR to detect text regions, then sends only cropped regions to Vision API (reduces costs by 90%+)
+- **Auto-Merge Dialogue**: Automatically merges split dialogue lines with configurable tolerances
+- **GPU Acceleration**: Automatically uses GPU for text detection if available (PaddleOCR)
+- **OpenAI-Compatible**: Works with LM Studio, OpenAI API, or any OpenAI-compatible endpoint
+- **Real-Time Preview**: See detection boxes and merged regions update live as you adjust settings
+- **Auto-Refresh UI**: UI automatically reflects results when using hotkey - no manual button presses needed
 
 ## Requirements
 
@@ -86,6 +89,26 @@ Edit `config.json` to set your API settings:
 - Set the **api_key** as required by your provider
 - Set the **model** to a vision-capable model name
 
+## Quick Start
+
+1. **Start the server:**
+   ```bash
+   uv run python run_server.py
+   ```
+
+2. **Open the UI** in your browser: `http://localhost:8000`
+
+3. **Press `Ctrl+Shift+Alt+Z`** while playing a visual novel - that's it! Text is automatically:
+   - Captured from the active window
+   - Detected using PaddleOCR
+   - Merged into complete dialogue lines
+   - Extracted using AI
+   - **Copied to your clipboard**
+
+4. **Paste anywhere** - the text is ready to use!
+
+The UI automatically updates to show detection boxes and extracted text. You only need to use the UI buttons if you want to tune settings for better detection.
+
 ## Usage
 
 ### Option 1: Web UI (Recommended for Configuration)
@@ -105,43 +128,40 @@ Then open your browser to: `http://localhost:8000`
 - **Non-destructive Overlays**: Boxes are drawn as HTML overlays, not on the image
 
 **Workflow:**
-1. Click "New Screenshot" to capture the active window
-2. Click "Run Detection" to detect text regions (red boxes appear)
-3. Adjust merge settings (vertical/horizontal tolerance, width ratio) - blue boxes update live
-4. Click "EXTRACT TEXT" to get the final OCR result
+1. **Quick Start**: Just press `Ctrl+Shift+Alt+Z` while playing a visual novel - text is automatically extracted and copied to clipboard!
+2. **Tune Settings** (optional): Use the UI to adjust detection sensitivity and merge tolerances
+   - Red boxes show detected text regions
+   - Blue boxes show merged dialogue lines
+   - Adjust sliders to fine-tune for your game/visual novel
+3. **Manual Mode** (optional): Click "New Screenshot" and "Run Detection" if you want to manually test settings
+4. The UI automatically shows results from hotkey captures - no need to press buttons unless re-tuning settings
 
-### Option 2: Command Line (Hotkey Mode)
+### Option 2: Standalone CLI (No Web UI)
 
-Run the standalone CLI:
+For headless operation without the web UI:
 
 ```bash
 uv run python -m src.backend.cli
 ```
 
-Or use the convenience script (if you create one):
+This runs the same hotkey functionality but prints results to console instead of updating a web UI. Useful for automation or when you don't need the visual interface.
 
-```bash
-uv run python run_cli.py
-```
+**Note**: The web UI mode (`run_server.py`) is recommended as it provides visual feedback and allows you to tune settings easily.
 
-The application will:
-1. Load configuration from `config.json`
-2. Register the global hotkey `Ctrl+Shift+Alt+Z`
-3. Wait for the hotkey press
+## Architecture
 
-When you press `Ctrl+Shift+Alt+Z`:
-1. Captures the active window
-2. Detects text regions using PaddleOCR (if installed)
-3. Sends only the detected text regions to the Vision API (much cheaper!)
-4. Extracts and prints text to the console
-
-Press `Ctrl+C` to exit.
+- **Backend-Authoritative**: All detection and merging logic runs in Python for consistency
+- **Lightweight Frontend**: TypeScript UI only renders results - no duplicate algorithms
+- **Debounced Updates**: Slider changes only trigger server requests on release (no spam)
+- **Cached Detections**: Detection results are cached per screenshot version for fast preview updates
+- **Auto-Sync**: UI automatically reflects hotkey results via Server-Sent Events (SSE)
 
 ## Notes
 
 - **Windows**: The `keyboard` library requires administrator privileges for global hotkeys
 - **Screenshot**: Captures only the active window (not the full screen)
 - **API Compatibility**: Works with any OpenAI-compatible API endpoint
+- **Clipboard**: Requires `pyperclip` package (included in dependencies) or falls back to system-specific methods
 
 ## Troubleshooting
 

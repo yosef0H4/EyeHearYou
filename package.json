@@ -1,7 +1,7 @@
 {
-  "name": "ocr-configurator",
+  "name": "visual-novel-ocr-ui",
   "version": "0.1.0",
-  "description": "OCR Configuration UI Frontend",
+  "description": "Lightweight TypeScript frontend for Visual Novel OCR tool - provides UI for tuning detection/merge settings with live preview",
   "scripts": {
     "build": "tsc",
     "watch": "tsc --watch"
