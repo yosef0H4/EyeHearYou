@@ -1,32 +1,25 @@
 # GPU Requirements for Visual Novel OCR
 # For users with NVIDIA GPU and CUDA support
 #
-# USAGE:
-# After running 'uv sync', install these dependencies:
-#   uv pip install -r requirements-gpu.txt
+# RECOMMENDED: Use install-gpu.bat for automated installation
+#   install-gpu.bat
 #
-# OR install manually (recommended for better control):
+# OR install manually:
 #   1. PyTorch 2.7.0 with CUDA 12.8:
 #      uv pip install torch==2.7.0 torchvision==0.22.0 torchaudio==2.7.0 --index-url https://download.pytorch.org/whl/cu128
 #
-#   2. Flash Attention (Windows prebuilt wheel):
-#      uv pip install https://huggingface.co/lldacing/flash-attention-windows-wheel/resolve/main/flash_attn-2.7.4.post1%2Bcu128torch2.7.0cxx11abiFALSE-cp312-cp312-win_amd64.whl
+#   2. Flash Attention 2.7.4 (Windows prebuilt wheel for torch 2.7.0 + CUDA 12.8):
+#      python -c "import urllib.request, os, shutil; temp_dir = os.environ.get('TEMP', '.'); src = os.path.join(temp_dir, 'flash_attn_temp.whl'); dst = os.path.join(temp_dir, 'flash_attn-2.7.4.post1+cu128torch2.7.0cxx11abiFALSE-cp312-cp312-win_amd64.whl'); urllib.request.urlretrieve('https://huggingface.co/lldacing/flash-attention-windows-wheel/resolve/main/flash_attn-2.7.4.post1+cu128torch2.7.0cxx11abiFALSE-cp312-cp312-win_amd64.whl', src); shutil.move(src, dst)"
+#      uv pip install "%TEMP%\flash_attn-2.7.4.post1+cu128torch2.7.0cxx11abiFALSE-cp312-cp312-win_amd64.whl"
 #
 #   3. H2OVL dependencies:
 #      uv pip install transformers accelerate timm peft
 #
-#   4. PaddlePaddle GPU (check your CUDA version with: nvidia-smi):
-#      # For CUDA 12.8:
-#      uv pip install --pre paddlepaddle-gpu -i https://www.paddlepaddle.org.cn/packages/nightly/cu128/
-#      # For CUDA 12.1:
-#      uv pip install --pre paddlepaddle-gpu -i https://www.paddlepaddle.org.cn/packages/nightly/cu121/
-#      # For CUDA 11.8:
-#      uv pip install paddlepaddle-gpu==2.6.2 -i https://www.paddlepaddle.org.cn/packages/stable/cu118/
-#      # For CUDA 10.2 (from PyPI):
-#      uv pip install paddlepaddle-gpu==2.6.2
+#   4. RapidOCR (CPU via ONNX Runtime, no GPU needed):
+#      uv pip install rapidocr-onnxruntime
 #
-#   5. PaddleOCR (install AFTER paddlepaddle-gpu):
-#      uv pip install paddleocr
+# NOTE: This configuration uses PyTorch 2.7.0 with CUDA 12.8 and Flash Attention 2.7.4.
+# This is the tested and working configuration. Other versions may have compatibility issues.
 
 # PyTorch 2.7.0 with CUDA 12.8
 --index-url https://download.pytorch.org/whl/cu128
@@ -34,9 +27,9 @@ torch==2.7.0
 torchvision==0.22.0
 torchaudio==2.7.0
 
-# Flash Attention 2 (Windows prebuilt wheel for torch 2.7.0 + CUDA 12.8)
-# Note: This URL may need to be installed separately due to URL encoding
-# Use: uv pip install "https://huggingface.co/lldacing/flash-attention-windows-wheel/resolve/main/flash_attn-2.7.4.post1%2Bcu128torch2.7.0cxx11abiFALSE-cp312-cp312-win_amd64.whl"
+# Flash Attention 2.7.4 (Windows prebuilt wheel for torch 2.7.0 + CUDA 12.8)
+# Note: Must be installed separately due to URL encoding and filename requirements
+# See manual installation instructions above or use install-gpu.bat
 
 # H2OVL-Mississippi dependencies
 transformers>=4.40.0
@@ -44,12 +37,5 @@ accelerate>=0.30.0
 timm>=0.9.0
 peft>=0.10.0
 
-# PaddlePaddle GPU - UNCOMMENT THE LINE FOR YOUR CUDA VERSION
-# Check your CUDA version first: nvidia-smi
-# --pre -i https://www.paddlepaddle.org.cn/packages/nightly/cu128/ paddlepaddle-gpu
-# --pre -i https://www.paddlepaddle.org.cn/packages/nightly/cu121/ paddlepaddle-gpu
-# -i https://www.paddlepaddle.org.cn/packages/stable/cu118/ paddlepaddle-gpu==2.6.2
-# paddlepaddle-gpu==2.6.2
-
-# PaddleOCR (install AFTER paddlepaddle-gpu)
-paddleocr
+# RapidOCR (CPU via ONNX Runtime, no GPU needed)
+rapidocr-onnxruntime

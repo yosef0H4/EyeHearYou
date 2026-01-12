@@ -4,8 +4,8 @@ from PyQt6.QtCore import Qt, QRect
 from PyQt6.QtGui import QPainter, QPen, QColor, QBrush, QFont, QPixmap
 
 
-class PaddleVizWidget(QWidget):
-    """Visualizer widget for text detection settings showing confidence and size"""
+class DetectionVizWidget(QWidget):
+    """Visualizer widget for text detection settings showing size"""
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setMinimumSize(120, 120)

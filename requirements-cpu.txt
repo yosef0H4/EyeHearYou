@@ -12,11 +12,8 @@
 #   2. H2OVL dependencies:
 #      uv pip install transformers accelerate timm peft
 #
-#   3. PaddlePaddle CPU:
-#      uv pip install paddlepaddle==2.6.2
-#
-#   4. PaddleOCR:
-#      uv pip install paddleocr
+#   3. RapidOCR (CPU via ONNX Runtime):
+#      uv pip install rapidocr-onnxruntime
 
 # PyTorch CPU version (for H2OVL-Mississippi-0.8B)
 # Note: CPU version is slower but will work without GPU
@@ -31,8 +28,5 @@ accelerate>=0.30.0
 timm>=0.9.0
 peft>=0.10.0
 
-# PaddlePaddle CPU (for text detection)
-paddlepaddle==2.6.2
-
-# PaddleOCR (install AFTER paddlepaddle)
-paddleocr
+# RapidOCR (CPU via ONNX Runtime, for text detection)
+rapidocr-onnxruntime

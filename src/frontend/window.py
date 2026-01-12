@@ -7,15 +7,15 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QSlider, QGroupBox, QPushButton, QTextEdit, QProgressBar,
     QGraphicsView, QGraphicsScene, QSplitter, QLineEdit, QSpinBox,
-    QGraphicsTextItem, QGraphicsPixmapItem, QScrollArea
+    QGraphicsTextItem, QGraphicsPixmapItem, QScrollArea, QComboBox, QFrame
 )
 from PyQt6.QtCore import Qt, QTimer, QRect, QEvent
-from PyQt6.QtGui import QPixmap, QImage, QPen, QColor, QBrush, QPainter, QFont
+from PyQt6.QtGui import QPixmap, QImage, QPen, QColor, QBrush, QPainter, QFont, QPainterPath
 
 from src.backend.core.config import load_config, CONFIG_FILE
 from src.backend.core.capture import capture_screenshot
 from src.backend.state import state
-from src.frontend.widgets import PaddleVizWidget, MergeVizWidget, ResizeVizWidget
+from src.frontend.widgets import DetectionVizWidget, MergeVizWidget, ResizeVizWidget
 from src.frontend.worker import OCRWorker
 from src.frontend.theme import DARK_THEME_STYLESHEET
 from src.frontend.constants import KEYBOARD_AVAILABLE, CLIPBOARD_AVAILABLE, keyboard, pyperclip
@@ -63,7 +63,10 @@ class OCRWindow(QMainWindow):
         # API Settings Group
         self.create_api_group(controls_layout)
 
-        # Preprocessing Group
+        # New Preprocessing Group
+        self.create_image_preprocessing_group(controls_layout)
+
+        # Preprocessing Group (Legacy/Size)
         self.create_preprocessing_group(controls_layout)
 
         # Detection Settings Group
@@ -175,9 +178,117 @@ class OCRWindow(QMainWindow):
         group.setLayout(g_layout)
         layout.addWidget(group)
 
+    def create_image_preprocessing_group(self, layout):
+        """Create OpenCV-based Image Preprocessing settings group"""
+        group = QGroupBox("Image Adjustments")
+        g_layout = QVBoxLayout()
+        pp_config = self.config.get("preprocessing", {})
+
+        # 1. Invert Checkbox
+        chk_layout = QHBoxLayout()
+        self.chk_invert = QComboBox()
+        self.chk_invert.addItem("Normal Colors", False)
+        self.chk_invert.addItem("Invert Colors", True)
+        self.chk_invert.setCurrentIndex(1 if pp_config.get("invert", False) else 0)
+        
+        self.chk_invert.currentIndexChanged.connect(
+            lambda idx: self.update_pp("invert", bool(self.chk_invert.currentData()))
+        )
+        chk_layout.addWidget(QLabel("Colors:"))
+        chk_layout.addWidget(self.chk_invert)
+        g_layout.addLayout(chk_layout)
+
+        # 2. Binary Threshold (0 = Disabled)
+        thresh_layout = QHBoxLayout()
+        thresh_label = QLabel("Binary Threshold:")
+        self.thresh_val = QLabel(str(pp_config.get("binary_threshold", 0)))
+        self.thresh_val.setMinimumWidth(30)
+        
+        thresh_slider = QSlider(Qt.Orientation.Horizontal)
+        thresh_slider.setRange(0, 255)
+        thresh_slider.setValue(pp_config.get("binary_threshold", 0))
+        
+        thresh_slider.valueChanged.connect(
+            lambda v: self.update_pp_slider("binary_threshold", v, self.thresh_val)
+        )
+        thresh_slider.sliderReleased.connect(self.save_and_refresh)
+        
+        thresh_layout.addWidget(thresh_label)
+        thresh_layout.addWidget(thresh_slider)
+        thresh_layout.addWidget(self.thresh_val)
+        g_layout.addLayout(thresh_layout)
+        g_layout.addWidget(QLabel("(0 = Disabled). Helps separate text from background."))
+
+        # 3. Contrast (1.0 = Normal)
+        cont_layout = QHBoxLayout()
+        cont_label = QLabel("Contrast:")
+        self.cont_val = QLabel(f"{pp_config.get('contrast', 1.0):.1f}")
+        self.cont_val.setMinimumWidth(30)
+        
+        cont_slider = QSlider(Qt.Orientation.Horizontal)
+        cont_slider.setRange(5, 30) # 0.5 to 3.0
+        cont_slider.setValue(int(pp_config.get("contrast", 1.0) * 10))
+        
+        cont_slider.valueChanged.connect(
+            lambda v: self.update_pp_slider("contrast", v/10.0, self.cont_val, "{:.1f}")
+        )
+        cont_slider.sliderReleased.connect(self.save_and_refresh)
+        
+        cont_layout.addWidget(cont_label)
+        cont_layout.addWidget(cont_slider)
+        cont_layout.addWidget(self.cont_val)
+        g_layout.addLayout(cont_layout)
+
+        # 4. Brightness
+        bright_layout = QHBoxLayout()
+        bright_label = QLabel("Brightness:")
+        self.bright_val = QLabel(str(pp_config.get("brightness", 0)))
+        self.bright_val.setMinimumWidth(30)
+        
+        bright_slider = QSlider(Qt.Orientation.Horizontal)
+        bright_slider.setRange(-100, 100)
+        bright_slider.setValue(pp_config.get("brightness", 0))
+        
+        bright_slider.valueChanged.connect(
+            lambda v: self.update_pp_slider("brightness", v, self.bright_val)
+        )
+        bright_slider.sliderReleased.connect(self.save_and_refresh)
+        
+        bright_layout.addWidget(bright_label)
+        bright_layout.addWidget(bright_slider)
+        bright_layout.addWidget(self.bright_val)
+        g_layout.addLayout(bright_layout)
+
+        # 5. Dilation
+        dil_layout = QHBoxLayout()
+        dil_layout.addWidget(QLabel("Text Thickness (Dilation):"))
+        self.dil_spin = QSpinBox()
+        self.dil_spin.setRange(0, 5)
+        self.dil_spin.setValue(pp_config.get("dilation", 0))
+        self.dil_spin.valueChanged.connect(lambda v: self.update_pp("dilation", v))
+        dil_layout.addWidget(self.dil_spin)
+        g_layout.addLayout(dil_layout)
+
+        group.setLayout(g_layout)
+        layout.addWidget(group)
+
+    def update_pp(self, key, value):
+        """Update preprocessing config"""
+        if "preprocessing" not in self.config:
+            self.config["preprocessing"] = {}
+        self.config["preprocessing"][key] = value
+        self.save_and_refresh()
+
+    def update_pp_slider(self, key, value, label, fmt="{}"):
+        """Update label and config for sliders"""
+        label.setText(fmt.format(value))
+        if "preprocessing" not in self.config:
+            self.config["preprocessing"] = {}
+        self.config["preprocessing"][key] = value
+
     def create_preprocessing_group(self, layout):
         """Create Image Processing settings group with pixelation preview"""
-        group = QGroupBox("Image Processing")
+        group = QGroupBox("Image Size (Tokens)")
         g_layout = QVBoxLayout()
 
         # Visualizer
@@ -254,6 +365,27 @@ class OCRWindow(QMainWindow):
         group.setLayout(g_layout)
         layout.addWidget(group)
 
+    def create_separator(self):
+        """Create a horizontal separator line"""
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setFrameShadow(QFrame.Shadow.Sunken)
+        line.setStyleSheet("color: #555;")
+        return line
+
+    def on_order_changed(self, index):
+        """Update reading direction config"""
+        direction = self.order_combo.currentData()
+        if "text_sorting" not in self.config:
+            self.config["text_sorting"] = {}
+        self.config["text_sorting"]["direction"] = direction
+        # Keep legacy reading_direction for backward compatibility
+        if direction in ["horizontal_ltr", "vertical_ltr"]:
+            self.config["reading_direction"] = "ltr"
+        else:
+            self.config["reading_direction"] = "rtl"
+        self.save_and_refresh()
+
     def create_detection_group(self, layout):
         group = QGroupBox("Detection Settings (RapidOCR)")
         g_layout = QVBoxLayout()
@@ -267,32 +399,9 @@ class OCRWindow(QMainWindow):
         viz_container.setStyleSheet("background: #000; border: 1px dashed #555; border-radius: 4px;")
         viz_layout = QVBoxLayout(viz_container)
         viz_layout.setContentsMargins(0, 0, 0, 0)
-        self.paddle_viz = PaddleVizWidget()
-        viz_layout.addWidget(self.paddle_viz, alignment=Qt.AlignmentFlag.AlignCenter)
+        self.detection_viz = DetectionVizWidget()
+        viz_layout.addWidget(self.detection_viz, alignment=Qt.AlignmentFlag.AlignCenter)
         g_layout.addWidget(viz_container)
-
-        # Min Confidence
-        conf_layout = QHBoxLayout()
-        conf_label_text = QLabel("Min Confidence:")
-        self.conf_label = QLabel(f"{td_config.get('min_confidence', 0.6):.2f}")
-        self.conf_label.setMinimumWidth(50)
-        self.conf_label.setStyleSheet("color: #aaa; font-weight: 600;")
-        conf_slider = QSlider(Qt.Orientation.Horizontal)
-        conf_slider.setMinimum(10)
-        conf_slider.setMaximum(100)
-        conf_slider.setValue(int(td_config.get("min_confidence", 0.6) * 100))
-        conf_slider.valueChanged.connect(
-            lambda v: self.on_confidence_change(v / 100.0)
-        )
-        conf_slider.sliderReleased.connect(self.save_and_refresh)
-        conf_layout.addWidget(conf_label_text)
-        conf_layout.addWidget(conf_slider)
-        conf_layout.addWidget(self.conf_label)
-        g_layout.addLayout(conf_layout)
-        info_conf = QLabel("Controls detection sensitivity. Lower = more detections (may include noise)")
-        info_conf.setStyleSheet("font-size: 10px; color: #888; font-style: italic;")
-        info_conf.setWordWrap(True)
-        g_layout.addWidget(info_conf)
 
         # Min Width
         width_layout = QHBoxLayout()
@@ -315,7 +424,7 @@ class OCRWindow(QMainWindow):
             width_spin.blockSignals(True)
             width_spin.setValue(v)
             width_spin.blockSignals(False)
-            self.update_paddle_viz()
+            self.update_detection_viz()
         
         def on_width_spin_change(v):
             clamped = max(5, min(300, v))
@@ -323,7 +432,7 @@ class OCRWindow(QMainWindow):
             width_slider.setValue(clamped)
             width_slider.blockSignals(False)
             self.on_slider_change("min_width", v, self.width_label, "{:.0f}")
-            self.update_paddle_viz()
+            self.update_detection_viz()
         
         width_slider.valueChanged.connect(on_width_slider_change)
         width_slider.sliderReleased.connect(self.save_and_refresh)
@@ -357,7 +466,7 @@ class OCRWindow(QMainWindow):
             height_spin.blockSignals(True)
             height_spin.setValue(v)
             height_spin.blockSignals(False)
-            self.update_paddle_viz()
+            self.update_detection_viz()
         
         def on_height_spin_change(v):
             clamped = max(5, min(300, v))
@@ -365,7 +474,7 @@ class OCRWindow(QMainWindow):
             height_slider.setValue(clamped)
             height_slider.blockSignals(False)
             self.on_slider_change("min_height", v, self.height_label, "{:.0f}")
-            self.update_paddle_viz()
+            self.update_detection_viz()
         
         height_slider.valueChanged.connect(on_height_slider_change)
         height_slider.sliderReleased.connect(self.save_and_refresh)
@@ -379,23 +488,113 @@ class OCRWindow(QMainWindow):
         g_layout.addLayout(height_layout)
 
         # Store references for later updates
-        self.conf_slider = conf_slider
         self.width_slider = width_slider
         self.height_slider = height_slider
         self.width_spin = width_spin
         self.height_spin = height_spin
 
         # Initialize visualizer
-        self.update_paddle_viz()
+        self.update_detection_viz()
 
         group.setLayout(g_layout)
         layout.addWidget(group)
 
     def create_merge_group(self, layout):
-        group = QGroupBox("Merge Settings")
+        group = QGroupBox("Merge & Ordering")
         g_layout = QVBoxLayout()
 
         td_config = self.config.get("text_detection", {})
+
+        # Reading Direction Control (New enhanced version)
+        sort_config = self.config.get("text_sorting", {})
+        if not sort_config:
+            # Initialize if missing
+            if "text_sorting" not in self.config:
+                self.config["text_sorting"] = {}
+            # Migrate from legacy reading_direction
+            legacy_dir = self.config.get("reading_direction", "ltr")
+            self.config["text_sorting"]["direction"] = "horizontal_ltr" if legacy_dir == "ltr" else "horizontal_rtl"
+            self.config["text_sorting"]["group_tolerance"] = 0.5
+            sort_config = self.config["text_sorting"]
+        
+        order_layout = QHBoxLayout()
+        order_layout.addWidget(QLabel("Reading Direction:"))
+        
+        self.order_combo = QComboBox()
+        self.order_combo.addItem("Left to Right (Standard)", "horizontal_ltr")
+        self.order_combo.addItem("Right to Left (Manga)", "horizontal_rtl")
+        self.order_combo.addItem("Vertical Columns (Traditional)", "vertical_rtl")
+        self.order_combo.addItem("Vertical Columns (LTR)", "vertical_ltr")
+        
+        # Set current value
+        current_dir = sort_config.get("direction", "horizontal_ltr")
+        index = self.order_combo.findData(current_dir)
+        if index >= 0:
+            self.order_combo.setCurrentIndex(index)
+        
+        self.order_combo.currentIndexChanged.connect(self.on_order_changed)
+        order_layout.addWidget(self.order_combo)
+        order_layout.addStretch()
+        
+        g_layout.addLayout(order_layout)
+        
+        # Grouping Tolerance Control
+        grp_layout = QHBoxLayout()
+        grp_label = QLabel("Line Grouping:")
+        self.grp_val_label = QLabel(f"{sort_config.get('group_tolerance', 0.5):.2f}")
+        self.grp_val_label.setMinimumWidth(50)
+        self.grp_val_label.setStyleSheet("color: #aaa; font-weight: 600;")
+        
+        grp_slider = QSlider(Qt.Orientation.Horizontal)
+        grp_slider.setMinimum(1)   # 0.1
+        grp_slider.setMaximum(20)  # 2.0
+        grp_slider.setValue(int(sort_config.get("group_tolerance", 0.5) * 10))
+        
+        grp_spin = QSpinBox()
+        grp_spin.setMinimum(1)
+        grp_spin.setMaximum(20)
+        grp_spin.setValue(int(sort_config.get("group_tolerance", 0.5) * 10))
+        grp_spin.setMaximumWidth(80)
+        grp_spin.setSuffix(" (×0.1)")
+        
+        def on_grp_slider_change(v):
+            val = v / 10.0
+            self.grp_val_label.setText(f"{val:.2f}")
+            grp_spin.blockSignals(True)
+            grp_spin.setValue(v)
+            grp_spin.blockSignals(False)
+            if "text_sorting" not in self.config:
+                self.config["text_sorting"] = {}
+            self.config["text_sorting"]["group_tolerance"] = val
+        
+        def on_grp_spin_change(v):
+            clamped = max(1, min(20, v))
+            grp_slider.blockSignals(True)
+            grp_slider.setValue(clamped)
+            grp_slider.blockSignals(False)
+            val = clamped / 10.0
+            self.grp_val_label.setText(f"{val:.2f}")
+            if "text_sorting" not in self.config:
+                self.config["text_sorting"] = {}
+            self.config["text_sorting"]["group_tolerance"] = val
+        
+        grp_slider.valueChanged.connect(on_grp_slider_change)
+        grp_slider.sliderReleased.connect(self.save_and_refresh)
+        grp_spin.valueChanged.connect(on_grp_spin_change)
+        grp_spin.editingFinished.connect(self.save_and_refresh)
+        
+        grp_layout.addWidget(grp_label)
+        grp_layout.addWidget(grp_slider)
+        grp_layout.addWidget(grp_spin)
+        grp_layout.addWidget(self.grp_val_label)
+        g_layout.addLayout(grp_layout)
+        
+        info_grp = QLabel("Controls how strictly boxes must align to be in the same row/column. Lower = stricter grouping.")
+        info_grp.setStyleSheet("font-size: 10px; color: #888; font-style: italic;")
+        info_grp.setWordWrap(True)
+        g_layout.addWidget(info_grp)
+        
+        g_layout.addWidget(self.create_separator())
 
         # Mini Visualizer
         viz_container = QWidget()
@@ -545,19 +744,14 @@ class OCRWindow(QMainWindow):
             self.config["text_detection"] = {}
         self.config["text_detection"][key] = value
 
-    def on_confidence_change(self, value: float):
-        """Handle confidence slider change"""
-        self.on_slider_change("min_confidence", value, self.conf_label, "{:.2f}")
-        self.update_paddle_viz()
-
-    def update_paddle_viz(self):
-        """Update paddle visualizer"""
-        if hasattr(self, 'paddle_viz'):
+    def update_detection_viz(self):
+        """Update detection visualizer"""
+        if hasattr(self, 'detection_viz'):
             td_config = self.config.get("text_detection", {})
-            conf = td_config.get("min_confidence", 0.6)
             width = td_config.get("min_width", 30)
             height = td_config.get("min_height", 30)
-            self.paddle_viz.update_values(conf, width, height)
+            # Pass default confidence of 1.0 for visualization (not used for filtering)
+            self.detection_viz.update_values(1.0, width, height)
 
     def update_merge_viz(self):
         """Update merge visualizer"""
@@ -672,29 +866,62 @@ class OCRWindow(QMainWindow):
             )
 
     def draw_merged_boxes(self, merged_boxes_info: List[dict]):
-        """Draw blue merged boxes with count labels"""
+        """Draw blue merged boxes with count labels AND sequence numbers"""
         pen = QPen(QColor(0, 100, 255), 2)  # Blue outline
         brush = QBrush(QColor(0, 100, 255, 51))  # Semi-transparent blue fill (20% of 255)
+        
+        # Font for the sequence number
+        seq_font = QFont("Arial")
+        seq_font.setBold(True)
+        seq_font.setPixelSize(14)
 
-        for box_info in merged_boxes_info:
+        for i, box_info in enumerate(merged_boxes_info):
             rect = box_info["rect"]
             count = box_info.get("count", 1)
             x1, y1, x2, y2 = rect
             width = x2 - x1
             height = y2 - y1
 
-            # Draw merged box
+            # 1. Draw the box rectangle
             rect_item = self.scene.addRect(
                 float(x1), float(y1),
                 float(width), float(height),
                 pen, brush
             )
 
-            # Add count label if merged multiple boxes
+            # 2. Draw Sequence Number Badge (Top-Left corner)
+            # Circle background
+            badge_size = 24
+            badge_x = float(x1) - (badge_size / 2)
+            badge_y = float(y1) - (badge_size / 2)
+            
+            badge_item = self.scene.addEllipse(
+                badge_x, badge_y, badge_size, badge_size,
+                QPen(QColor(255, 255, 255), 1),  # White border
+                QBrush(QColor(0, 120, 215))      # Solid blue fill
+            )
+            badge_item.setZValue(200)  # Ensure it's on top
+
+            # Number text
+            seq_num = str(i + 1)
+            text_item = QGraphicsTextItem(seq_num)
+            text_item.setDefaultTextColor(QColor(255, 255, 255))
+            text_item.setFont(seq_font)
+            
+            # Center text in badge
+            text_rect = text_item.boundingRect()
+            text_x = badge_x + (badge_size - text_rect.width()) / 2
+            text_y = badge_y + (badge_size - text_rect.height()) / 2
+            
+            text_item.setPos(text_x, text_y)
+            text_item.setZValue(201)
+            self.scene.addItem(text_item)
+
+            # 3. Add count label if merged multiple boxes (bottom-right corner)
             if count > 1:
                 # Add background rectangle first (so it's behind text)
                 bg_rect = self.scene.addRect(
-                    float(x1) + 1, float(y1) + 1,
+                    float(x2) - 21, float(y2) - 17,
                     20, 16,
                     QPen(Qt.PenStyle.NoPen),
                     QBrush(QColor(0, 100, 255))
@@ -702,15 +929,15 @@ class OCRWindow(QMainWindow):
                 bg_rect.setZValue(100)
                 
                 # Add text on top
-                text_item = QGraphicsTextItem(str(count))
-                text_item.setDefaultTextColor(QColor(255, 255, 255))
-                font = QFont()
-                font.setBold(True)
-                font.setPointSize(10)
-                text_item.setFont(font)
-                text_item.setPos(float(x1) + 2, float(y1) + 2)
-                text_item.setZValue(101)
-                self.scene.addItem(text_item)
+                count_text = QGraphicsTextItem(str(count))
+                count_text.setDefaultTextColor(QColor(255, 255, 255))
+                count_font = QFont()
+                count_font.setBold(True)
+                count_font.setPointSize(10)
+                count_text.setFont(count_font)
+                count_text.setPos(float(x2) - 19, float(y2) - 15)
+                count_text.setZValue(101)
+                self.scene.addItem(count_text)
 
     def draw_tolerance_zones(self, merged_boxes_info: List[dict]):
         """Draw yellow tolerance zones around original boxes"""
@@ -742,12 +969,128 @@ class OCRWindow(QMainWindow):
                         pen, brush
                     )
 
+    def draw_ordering_visualization(self, merged_boxes_info: List[dict]):
+        """Draw flow path, guide lines, and order numbers for reading order visualization"""
+        if not merged_boxes_info:
+            return
+        
+        sort_config = self.config.get("text_sorting", {})
+        direction = sort_config.get("direction", "horizontal_ltr")
+        group_tol = sort_config.get("group_tolerance", 0.5)
+        
+        # 1. Draw Flow Path (Connecting centers with arrows)
+        path_pen = QPen(QColor(255, 0, 255), 2)  # Magenta/Purple
+        path_pen.setStyle(Qt.PenStyle.DashLine)
+        path_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        
+        centers = []
+        for box_info in merged_boxes_info:
+            rect = box_info["rect"]
+            x1, y1, x2, y2 = rect
+            center_x = (x1 + x2) / 2
+            center_y = (y1 + y2) / 2
+            centers.append((center_x, center_y))
+        
+        if len(centers) > 1:
+            path = QPainterPath()
+            path.moveTo(*centers[0])
+            for cx, cy in centers[1:]:
+                path.lineTo(cx, cy)
+            
+            path_item = self.scene.addPath(path, path_pen)
+            path_item.setZValue(150)  # Above tolerance zones, below boxes
+            
+            # Draw arrow heads at each segment
+            arrow_pen = QPen(QColor(255, 0, 255), 2)
+            arrow_brush = QBrush(QColor(255, 0, 255))
+            for i in range(len(centers) - 1):
+                x1, y1 = centers[i]
+                x2, y2 = centers[i + 1]
+                
+                # Calculate arrow direction
+                dx = x2 - x1
+                dy = y2 - y1
+                length = (dx**2 + dy**2)**0.5
+                if length > 0:
+                    # Normalize
+                    dx /= length
+                    dy /= length
+                    
+                    # Arrow size
+                    arrow_size = 8
+                    arrow_back = 12
+                    
+                    # Arrow tip
+                    tip_x = x2
+                    tip_y = y2
+                    
+                    # Arrow base points
+                    perp_dx = -dy
+                    perp_dy = dx
+                    
+                    base_x = tip_x - dx * arrow_back
+                    base_y = tip_y - dy * arrow_back
+                    
+                    left_x = base_x + perp_dx * arrow_size
+                    left_y = base_y + perp_dy * arrow_size
+                    right_x = base_x - perp_dx * arrow_size
+                    right_y = base_y - perp_dy * arrow_size
+                    
+                    # Draw arrow triangle
+                    arrow_path = QPainterPath()
+                    arrow_path.moveTo(tip_x, tip_y)
+                    arrow_path.lineTo(left_x, left_y)
+                    arrow_path.lineTo(right_x, right_y)
+                    arrow_path.closeSubpath()
+                    
+                    arrow_item = self.scene.addPath(arrow_path, arrow_pen, arrow_brush)
+                    arrow_item.setZValue(151)
+        
+        # 2. Draw Grouping Guide Lines (Axes)
+        # These show the "bands" that boxes are grouped into
+        guide_pen = QPen(QColor(255, 255, 255, 80), 1)  # Semi-transparent white
+        guide_pen.setStyle(Qt.PenStyle.DotLine)
+        
+        # Get scene dimensions from scene rect
+        scene_rect = self.scene.sceneRect()
+        scene_width = scene_rect.width() if scene_rect.width() > 0 else 1000
+        scene_height = scene_rect.height() if scene_rect.height() > 0 else 1000
+        
+        if "horizontal" in direction:
+            # Horizontal guides: group by Y-coordinate
+            # Find unique Y positions (grouped lines)
+            y_positions = set()
+            for box_info in merged_boxes_info:
+                rect = box_info["rect"]
+                x1, y1, x2, y2 = rect
+                center_y = (y1 + y2) / 2
+                y_positions.add(center_y)
+            
+            # Draw horizontal guide lines
+            for y_pos in y_positions:
+                guide_line = self.scene.addLine(0, y_pos, scene_width, y_pos, guide_pen)
+                guide_line.setZValue(50)  # Below everything else
+        else:
+            # Vertical guides: group by X-coordinate
+            x_positions = set()
+            for box_info in merged_boxes_info:
+                rect = box_info["rect"]
+                x1, y1, x2, y2 = rect
+                center_x = (x1 + x2) / 2
+                x_positions.add(center_x)
+            
+            # Draw vertical guide lines
+            for x_pos in x_positions:
+                guide_line = self.scene.addLine(x_pos, 0, x_pos, scene_height, guide_pen)
+                guide_line.setZValue(50)  # Below everything else
+    
     def draw_all_boxes(self):
-        """Draw all box types: red (filtered), yellow (tolerance), blue (merged)"""
+        """Draw all box types: red (filtered), yellow (tolerance), blue (merged), and ordering visualization"""
         self.clear_all_boxes()
         
-        # Draw in order: tolerance zones (bottom), filtered boxes, merged boxes (top)
+        # Draw in order: guide lines (bottom), tolerance zones, filtered boxes, merged boxes, flow path (top)
         if self.merged_boxes:
+            self.draw_ordering_visualization(self.merged_boxes)
             self.draw_tolerance_zones(self.merged_boxes)
         if self.filtered_boxes:
             self.draw_filtered_boxes(self.filtered_boxes)
@@ -786,6 +1129,7 @@ class OCRWindow(QMainWindow):
         self.worker.progress_signal.connect(self.update_progress)
         self.worker.finished_signal.connect(self.on_worker_finished)
         self.worker.error_signal.connect(self.on_worker_error)
+        self.worker.image_processed_signal.connect(self.display_image)
         self.worker.start()
 
     def cancel_process(self):

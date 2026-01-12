@@ -8,15 +8,14 @@ REM
 REM This script installs:
 REM - PyTorch CPU version
 REM - H2OVL-Mississippi dependencies
-REM - PaddlePaddle CPU
-REM - PaddleOCR
+REM - RapidOCR (CPU via ONNX Runtime)
 
 echo ========================================
 echo CPU Requirements Installation
 echo ========================================
 echo.
 
-echo [1/4] Installing PyTorch CPU version...
+echo [1/3] Installing PyTorch CPU version...
 uv pip install torch torchvision torchaudio
 if errorlevel 1 (
     echo ERROR: Failed to install PyTorch
@@ -25,7 +24,7 @@ if errorlevel 1 (
 )
 
 echo.
-echo [2/4] Installing H2OVL-Mississippi dependencies...
+echo [2/3] Installing H2OVL-Mississippi dependencies...
 uv pip install transformers accelerate timm peft
 if errorlevel 1 (
     echo ERROR: Failed to install H2OVL dependencies
@@ -34,19 +33,10 @@ if errorlevel 1 (
 )
 
 echo.
-echo [3/4] Installing PaddlePaddle CPU...
-uv pip install paddlepaddle==2.6.2
+echo [3/3] Installing RapidOCR (CPU via ONNX Runtime)...
+uv pip install rapidocr-onnxruntime
 if errorlevel 1 (
-    echo ERROR: Failed to install PaddlePaddle
-    pause
-    exit /b 1
-)
-
-echo.
-echo [4/4] Installing PaddleOCR...
-uv pip install paddleocr
-if errorlevel 1 (
-    echo ERROR: Failed to install PaddleOCR
+    echo ERROR: Failed to install RapidOCR
     pause
     exit /b 1
 )
@@ -58,7 +48,7 @@ echo ========================================
 echo.
 echo Verify installation:
 echo   python -c "import torch; print(f'PyTorch: {torch.__version__}')"
-echo   python -c "import paddle; print(f'PaddlePaddle: {paddle.__version__}')"
+echo   python -c "from rapidocr_onnxruntime import RapidOCR; print('RapidOCR: Installed successfully')"
 echo.
 pause
 

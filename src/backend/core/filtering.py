@@ -2,15 +2,20 @@
 import numpy as np
 
 
-def sort_text_regions_by_reading_order(text_regions, direction='hor_ltr', band_ratio=0.5):
+def sort_text_regions_by_reading_order(text_regions, direction='horizontal_ltr', group_tolerance=0.5):
     """
-    Sort text regions by reading order (top-to-bottom, left-to-right for English).
-    Similar to comic-translate's sorting logic.
+    Sort text regions by reading order with configurable direction.
     
     Args:
         text_regions: List of (x1, y1, x2, y2) bounding boxes
-        direction: Reading direction ('hor_ltr' for English, 'hor_rtl' for RTL languages)
-        band_ratio: Ratio for grouping items on the same line (default: 0.5)
+        direction: Reading direction:
+            'horizontal_ltr' (Left-Right, Top-Bottom) - Standard English
+            'horizontal_rtl' (Right-Left, Top-Bottom) - Manga
+            'vertical_ltr'   (Top-Bottom, Left-Right) - Vertical text (Columns LTR)
+            'vertical_rtl'   (Top-Bottom, Right-Left) - Vertical text (Columns RTL)
+            'ltr' (legacy) - Same as 'horizontal_ltr'
+            'rtl' (legacy) - Same as 'horizontal_rtl'
+        group_tolerance: Ratio of median height/width to group items (default: 0.5)
     
     Returns:
         Sorted list of bounding boxes in reading order
@@ -18,51 +23,99 @@ def sort_text_regions_by_reading_order(text_regions, direction='hor_ltr', band_r
     if not text_regions:
         return []
     
-    # Calculate median height for adaptive band grouping
+    # Backward compatibility: map old 'ltr'/'rtl' to new format
+    if direction == 'ltr':
+        direction = 'horizontal_ltr'
+    elif direction == 'rtl':
+        direction = 'horizontal_rtl'
+    
+    # Calculate dimensions for adaptive grouping
+    widths = [(x2 - x1) for x1, y1, x2, y2 in text_regions]
     heights = [(y2 - y1) for x1, y1, x2, y2 in text_regions]
     median_h = np.median(heights) if heights else 30.0
-    adaptive_band = band_ratio * median_h
+    median_w = np.median(widths) if widths else 30.0
     
-    # Group regions into lines (regions with similar y-coordinates)
-    lines = []
-    used = [False] * len(text_regions)
-    
-    for i, (x1, y1, x2, y2) in enumerate(text_regions):
-        if used[i]:
-            continue
+    # --- Horizontal Sorting (Rows first, then X) ---
+    if direction.startswith('horizontal'):
+        # Group regions into lines based on Y-coordinate
+        adaptive_band = group_tolerance * median_h
         
-        # Start a new line with this region
-        line = [(x1, y1, x2, y2)]
-        used[i] = True
-        center_y = (y1 + y2) / 2
+        # Sort by Y top-to-bottom first
+        y_sorted = sorted(text_regions, key=lambda r: r[1])
         
-        # Find other regions on the same line
-        for j, (x1_j, y1_j, x2_j, y2_j) in enumerate(text_regions):
-            if used[j]:
-                continue
-            center_y_j = (y1_j + y2_j) / 2
-            if abs(center_y - center_y_j) <= adaptive_band:
-                line.append((x1_j, y1_j, x2_j, y2_j))
-                used[j] = True
+        lines = []
+        current_line = []
+        current_y = -1000
         
-        lines.append(line)
-    
-    # Sort items within each line by x-coordinate (left-to-right for LTR)
-    for line_idx, line in enumerate(lines):
-        if direction == 'hor_ltr':
-            lines[line_idx] = sorted(line, key=lambda bbox: bbox[0])  # Sort by x1
-        else:  # hor_rtl
-            lines[line_idx] = sorted(line, key=lambda bbox: -bbox[0], reverse=True)  # Sort by x1 descending
-    
-    # Sort lines by y-coordinate (top-to-bottom)
-    lines.sort(key=lambda line: min(bbox[1] for bbox in line))  # Sort by min y1
-    
-    # Flatten back to list of regions
-    sorted_regions = []
-    for line in lines:
-        sorted_regions.extend(line)
-    
-    return sorted_regions
+        for box in y_sorted:
+            y1 = box[1]
+            # If this box is close enough to the current line's Y, add it
+            if current_line and abs(y1 - current_y) <= adaptive_band:
+                current_line.append(box)
+                # Update current_y to average of line (moving average)
+                current_y = np.mean([(b[1] + b[3]) / 2 for b in current_line])
+            else:
+                if current_line:
+                    lines.append(current_line)
+                current_line = [box]
+                current_y = (box[1] + box[3]) / 2
+        
+        if current_line:
+            lines.append(current_line)
+            
+        # Sort within lines
+        sorted_regions = []
+        for line in lines:
+            if 'ltr' in direction:
+                # Left to Right
+                line.sort(key=lambda r: r[0])
+            else:
+                # Right to Left (Manga)
+                line.sort(key=lambda r: r[0], reverse=True)
+            sorted_regions.extend(line)
+            
+        return sorted_regions
+
+    # --- Vertical Sorting (Columns first, then Y) ---
+    elif direction.startswith('vertical'):
+        # Group regions into columns based on X-coordinate
+        adaptive_band = group_tolerance * median_w
+        
+        # Sort by X first (LTR or RTL depending on sub-type)
+        if 'ltr' in direction:
+            x_sorted = sorted(text_regions, key=lambda r: r[0])
+        else:
+            x_sorted = sorted(text_regions, key=lambda r: r[0], reverse=True)
+            
+        columns = []
+        current_col = []
+        current_x = -1000
+        
+        for box in x_sorted:
+            x1 = box[0]
+            if current_col and abs(x1 - current_x) <= adaptive_band:
+                current_col.append(box)
+                # Update current_x to average of column
+                current_x = np.mean([(b[0] + b[2]) / 2 for b in current_col])
+            else:
+                if current_col:
+                    columns.append(current_col)
+                current_col = [box]
+                current_x = (box[0] + box[2]) / 2
+        
+        if current_col:
+            columns.append(current_col)
+            
+        # Sort within columns (Top to Bottom)
+        sorted_regions = []
+        for col in columns:
+            col.sort(key=lambda r: r[1])
+            sorted_regions.extend(col)
+            
+        return sorted_regions
+
+    # Fallback: return original order
+    return text_regions
 
 
 def filter_text_regions(text_regions, image_shape, min_width=30, min_height=30):

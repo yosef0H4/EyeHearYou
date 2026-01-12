@@ -6,6 +6,7 @@ from .filtering import filter_text_regions, sort_text_regions_by_reading_order
 from .detection import detect_text_regions, detect_text_regions_unfiltered
 from .merging import merge_close_text_boxes
 from .extraction import extract_text_with_vision_api, extract_text_from_regions, crop_text_regions
+from .preprocessing import process_image
 from .debug import save_debug_images
 
 __all__ = [
@@ -23,6 +24,7 @@ __all__ = [
     'extract_text_with_vision_api',
     'extract_text_from_regions',
     'crop_text_regions',
+    'process_image',
     'save_debug_images',
 ]
 

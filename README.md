@@ -7,9 +7,9 @@ A lightweight Python application for extracting text from visual novels and game
 - **One-Key Extraction**: Press `Ctrl+Shift+Alt+Z` to automatically capture, detect, extract, and copy text to clipboard
 - **Desktop GUI**: Visual interface to fine-tune detection and merge settings with live preview
 - **Backend-Authoritative**: All detection/merging logic runs in Python for consistency between preview and extraction
-- **Smart Text Detection**: Uses PaddleOCR to detect text regions, then sends only cropped regions to Vision API (reduces costs by 90%+)
+- **Smart Text Detection**: Uses RapidOCR to detect text regions, then sends only cropped regions to Vision API (reduces costs by 90%+)
 - **Auto-Merge Dialogue**: Automatically merges split dialogue lines with configurable tolerances
-- **GPU Acceleration**: Automatically uses GPU for text detection if available (PaddleOCR)
+- **CPU-Based Detection**: RapidOCR runs on CPU via ONNX Runtime (no GPU conflicts with PyTorch)
 - **OpenAI-Compatible**: Works with LM Studio, OpenAI API, or any OpenAI-compatible endpoint
 - **Real-Time Preview**: See detection boxes and merged regions update live as you adjust settings
 - **Auto-Refresh UI**: UI automatically reflects results when using hotkey - no manual button presses needed
@@ -31,36 +31,28 @@ A lightweight Python application for extracting text from visual novels and game
    uv sync
    ```
 
-3. **Install PaddleOCR with GPU support (recommended for better performance)**:   
-   
-   For GPU support (requires NVIDIA GPU with CUDA):
+3. **Install RapidOCR (for text detection)**:
    ```bash
-   # First, check your CUDA version: nvidia-smi
-   # PaddlePaddle GPU 2.6.2 supports CUDA 10.2/11.2/11.6/11.7
-   # Reference: https://pypi.org/project/paddlepaddle-gpu/
-   
-   # For CUDA 10.2 (from PyPI - simplest method):
-   pip install paddlepaddle-gpu==2.6.2
-   
-   # For CUDA 11.2/11.6/11.7 (from PaddlePaddle website):
-   # Check the official installation guide for your specific CUDA version:
-   # https://www.paddlepaddle.org.cn/install/quick
-   # The website provides installation commands for different CUDA versions
-   
-   # Then install PaddleOCR
-   pip install paddleocr
+   uv pip install rapidocr-onnxruntime
    ```
    
-   For CPU-only (if no GPU available):
+   **Note**: RapidOCR runs on CPU via ONNX Runtime and doesn't require GPU or CUDA. It's lightweight and doesn't conflict with PyTorch dependencies. If RapidOCR is not installed, the app will process the full image instead of detecting text regions.
+
+4. **Optional: Install GPU support for H2OVL-Mississippi OCR model**:
+   
+   If you want to use the H2OVL-Mississippi-0.8B model for OCR (instead of API-based OCR), run:
    ```bash
-   pip install paddlepaddle==2.6.2
-   pip install paddleocr
+   install-gpu.bat
    ```
    
-   **Note**: PyPI only provides CUDA 10.2 builds. For other CUDA versions (11.2/11.6/11.7), 
-   you need to install from the PaddlePaddle website. See the [official installation guide](https://www.paddlepaddle.org.cn/install/quick) for details.
+   This installs:
+   - PyTorch 2.7.0 with CUDA 12.8
+   - Flash Attention 2.7.4 (Windows prebuilt wheel)
+   - H2OVL-Mississippi dependencies (transformers, accelerate, timm, peft)
    
-   **Note**: The application will automatically detect and use GPU if available, otherwise it falls back to CPU. If PaddleOCR is not installed, the app will process the full image instead of detecting text regions.
+   **Requirements**: NVIDIA GPU with CUDA 12.8 support
+   
+   **Note**: The GPU installation is optional. The default OCR uses API-based extraction (OpenAI, LM Studio, etc.) which doesn't require GPU.
 
 ## Configuration
 
@@ -101,7 +93,7 @@ uv run python run_gui.py
 
 **Press `Ctrl+Shift+Alt+Z`** while playing a visual novel - that's it! Text is automatically:
 - Captured from the active window
-- Detected using PaddleOCR
+- Detected using RapidOCR
 - Merged into complete dialogue lines
 - Extracted using AI
 - **Copied to your clipboard**
@@ -165,7 +157,7 @@ This runs the same hotkey functionality but prints results to console instead of
 - **Backend-Authoritative**: All detection and merging logic runs in Python for consistency
 - **Native GUI**: PyQt6 desktop application with instant updates and real progress tracking
 - **Cached Detections**: Detection results are cached per screenshot version for fast preview updates
-- **Live Preview**: Confidence and size filters are applied after PaddleOCR runs, enabling instant preview updates without re-running detection
+- **Live Preview**: Size filters are applied after RapidOCR runs, enabling instant preview updates without re-running detection
 
 ## Notes
 
@@ -189,8 +181,7 @@ This runs the same hotkey functionality but prints results to console instead of
 - Make sure you're using the virtual environment: `uv run python run_gui.py` or `uv run python run_cli.py`
 - Or activate the venv: `.venv\Scripts\activate` (Windows) or `source .venv/bin/activate` (Linux/Mac)
 
-### PaddleOCR GPU issues
-- Verify CUDA is installed: `nvidia-smi` (should show your GPU)
-- Check PaddlePaddle GPU installation: `python -c "import paddle; print(paddle.device.get_device())"`
-- If GPU is not detected, the app will automatically use CPU (slower but still works)
-- For CUDA version compatibility, check: https://www.paddlepaddle.org.cn/install/quick
+### RapidOCR issues
+- RapidOCR runs on CPU via ONNX Runtime - no GPU configuration needed
+- If RapidOCR is not installed, the app will process the full image instead of detecting text regions
+- Verify installation: `python -c "from rapidocr_onnxruntime import RapidOCR; print('RapidOCR installed successfully')"`

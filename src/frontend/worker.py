@@ -6,6 +6,7 @@ from src.backend.core.detection import detect_text_regions_unfiltered
 from src.backend.core.merging import merge_close_text_boxes
 from src.backend.core.filtering import filter_text_regions, sort_text_regions_by_reading_order
 from src.backend.core.extraction import crop_text_regions
+from src.backend.core.preprocessing import process_image
 from src.backend.state import state
 
 
@@ -14,6 +15,7 @@ class OCRWorker(QThread):
     progress_signal = pyqtSignal(str, int)  # Message, Percent
     finished_signal = pyqtSignal(object, object, str)  # Filtered Boxes, Merged Boxes (with info), Text
     error_signal = pyqtSignal(str)
+    image_processed_signal = pyqtSignal(object)  # Emits PIL Image after preprocessing
 
     def __init__(self, mode="full", config=None):
         super().__init__()
@@ -28,34 +30,32 @@ class OCRWorker(QThread):
                 self.error_signal.emit("No image captured. Please capture a screenshot first.")
                 return
 
-            # 1. Detection Phase (with caching)
+            # 1. Preprocessing & Detection Phase
             td_config = self.config.get("text_detection", {})
-            cached_key = state.screenshot_version
-            raw_detections_with_scores = None
             
-            # Check if we have cached detections
-            if cached_key in state.cached_raw_detections:
-                raw_detections_with_scores = state.cached_raw_detections[cached_key]
-                self.progress_signal.emit("Using cached detections...", 5)
-            else:
-                # Run new detection
-                self.progress_signal.emit("Detecting text regions...", 10)
-                if self.is_cancelled:
-                    return
-                
-                raw_detections_with_scores = detect_text_regions_unfiltered(image)
-                
-                if self.is_cancelled:
-                    return
-                
-                if raw_detections_with_scores is None:
-                    self.error_signal.emit("Failed to detect text regions. Is RapidOCR installed?")
-                    return
-                
-                # Cache the raw detections
-                if raw_detections_with_scores:
-                    state.cached_raw_detections[cached_key] = raw_detections_with_scores
-                    self.progress_signal.emit(f"Cached {len(raw_detections_with_scores)} raw detections", 15)
+            # Apply Preprocessing
+            self.progress_signal.emit("Preprocessing image...", 5)
+            processed_image = process_image(image, self.config)
+            
+            # Emit processed image for UI preview
+            self.image_processed_signal.emit(processed_image)
+            
+            # Use processed image for detection and extraction
+            image = processed_image
+            
+            # Run detection (Cache is skipped to ensure preprocessing changes take effect)
+            self.progress_signal.emit("Detecting text regions...", 10)
+            if self.is_cancelled:
+                return
+            
+            raw_detections_with_scores = detect_text_regions_unfiltered(image)
+            
+            if self.is_cancelled:
+                return
+            
+            if raw_detections_with_scores is None:
+                self.error_signal.emit("Failed to detect text regions. Is RapidOCR installed?")
+                return
             
             if not raw_detections_with_scores:
                 # No detections at all
@@ -90,8 +90,23 @@ class OCRWorker(QThread):
             if self.is_cancelled:
                 return
             
-            # Step 3: Sort by reading order
-            regions = sort_text_regions_by_reading_order(size_filtered, direction='hor_ltr')
+            # Get sorting config (with backward compatibility)
+            sort_config = self.config.get("text_sorting", {})
+            if not sort_config:
+                # Fallback to legacy reading_direction
+                legacy_dir = self.config.get("reading_direction", "ltr")
+                direction = "horizontal_ltr" if legacy_dir == "ltr" else "horizontal_rtl"
+                group_tol = 0.5
+            else:
+                direction = sort_config.get("direction", "horizontal_ltr")
+                group_tol = sort_config.get("group_tolerance", 0.5)
+            
+            # Step 3: Sort by reading order (Initial sort)
+            regions = sort_text_regions_by_reading_order(
+                size_filtered, 
+                direction=direction,
+                group_tolerance=group_tol
+            )
             
             if not regions:
                 self.progress_signal.emit("No regions found, processing full image...", 20)
@@ -123,16 +138,41 @@ class OCRWorker(QThread):
 
             self.progress_signal.emit(f"After merging close boxes: {len(merged_regions)} text region(s)", 25)
 
-            # Format merged boxes with count and original boxes
-            merged_boxes_info = []
-            for i, (merged_box, is_merged_flag, orig_group) in enumerate(zip(merged_regions, is_merged, original_groups)):
+            # Format merged boxes with count and original boxes (before re-sorting)
+            merged_boxes_info_unsorted = []
+            for merged_box, is_merged_flag, orig_group in zip(merged_regions, is_merged, original_groups):
                 if is_merged_flag and orig_group:
-                    merged_boxes_info.append({
+                    merged_boxes_info_unsorted.append({
                         "rect": merged_box,
                         "count": len(orig_group),
                         "originalBoxes": orig_group
                     })
                 else:
+                    merged_boxes_info_unsorted.append({
+                        "rect": merged_box,
+                        "count": 1,
+                        "originalBoxes": [merged_box]
+                    })
+            
+            # RE-SORT MERGED REGIONS
+            # Merging might have combined boxes in a way that slightly shifts 
+            # the effective "center", so we re-sort to ensure perfect reading order.
+            merged_regions = sort_text_regions_by_reading_order(
+                merged_regions,
+                direction=direction,
+                group_tolerance=group_tol
+            )
+
+            # Re-order merged_boxes_info to match the sorted merged_regions
+            # Create a mapping from box tuple to box info
+            box_to_info = {tuple(box_info["rect"]): box_info for box_info in merged_boxes_info_unsorted}
+            merged_boxes_info = []
+            for merged_box in merged_regions:
+                box_key = tuple(merged_box)
+                if box_key in box_to_info:
+                    merged_boxes_info.append(box_to_info[box_key])
+                else:
+                    # Fallback if mapping fails
                     merged_boxes_info.append({
                         "rect": merged_box,
                         "count": 1,

@@ -45,12 +45,19 @@ dependencies = [
 # from PyPI, which would replace the CUDA version.
 #
 # For H2OVL-Mississippi-0.8B with CUDA support, install separately AFTER uv sync:
+#   RECOMMENDED: Run install-gpu.bat for automated installation
+#   
+#   OR install manually:
 #   1. Install PyTorch 2.7.0 with CUDA 12.8:
 #      uv pip install torch==2.7.0 torchvision==0.22.0 torchaudio==2.7.0 --index-url https://download.pytorch.org/whl/cu128
-#   2. Install flash-attention (prebuilt Windows wheel):
-#      uv pip install https://huggingface.co/lldacing/flash-attention-windows-wheel/resolve/main/flash_attn-2.7.4.post1%2Bcu128torch2.7.0cxx11abiFALSE-cp312-cp312-win_amd64.whl
+#   2. Install Flash Attention 2.7.4 (prebuilt Windows wheel):
+#      python -c "import urllib.request, os, shutil; temp_dir = os.environ.get('TEMP', '.'); src = os.path.join(temp_dir, 'flash_attn_temp.whl'); dst = os.path.join(temp_dir, 'flash_attn-2.7.4.post1+cu128torch2.7.0cxx11abiFALSE-cp312-cp312-win_amd64.whl'); urllib.request.urlretrieve('https://huggingface.co/lldacing/flash-attention-windows-wheel/resolve/main/flash_attn-2.7.4.post1+cu128torch2.7.0cxx11abiFALSE-cp312-cp312-win_amd64.whl', src); shutil.move(src, dst)"
+#      uv pip install "%TEMP%\flash_attn-2.7.4.post1+cu128torch2.7.0cxx11abiFALSE-cp312-cp312-win_amd64.whl"
 #   3. Install H2OVL dependencies:
 #      uv pip install transformers accelerate timm peft
+#
+# NOTE: This configuration (PyTorch 2.7.0 + CUDA 12.8 + Flash Attention 2.7.4) is the tested
+# and working setup. Other versions may have compatibility issues.
 
 [tool.uv]
 environments = [

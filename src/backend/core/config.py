@@ -28,13 +28,24 @@ def load_config():
             "api_key": "lm-studio",
             "model": "gpt-4-vision-preview",
             "max_image_dimension": 1080,
+            "reading_direction": "ltr",  # Legacy: "ltr" for Left-to-Right, "rtl" for Right-to-Left (Manga)
+            "preprocessing": {
+                "binary_threshold": 0,    # 0-255, 0=disabled
+                "invert": False,
+                "dilation": 0,            # 0-5
+                "contrast": 1.0,          # 0.5 - 3.0
+                "brightness": 0           # -100 to 100
+            },
             "text_detection": {
-                "min_confidence": 0.6,
                 "min_width": 30,
                 "min_height": 30,
                 "merge_vertical_tolerance": 30,
                 "merge_horizontal_tolerance": 50,
                 "merge_width_ratio_threshold": 0.3
+            },
+            "text_sorting": {
+                "direction": "horizontal_ltr",  # Options: horizontal_ltr, horizontal_rtl, vertical_ltr, vertical_rtl
+                "group_tolerance": 0.5          # Multiplier for line/column grouping (0.1-2.0)
             }
         }
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:

@@ -8,17 +8,19 @@ REM 2. Check your CUDA version: nvidia-smi
 REM
 REM This script installs:
 REM - PyTorch 2.7.0 with CUDA 12.8
-REM - Flash Attention 2 (Windows prebuilt wheel)
-REM - H2OVL-Mississippi dependencies
-REM - PaddlePaddle GPU (you may need to adjust CUDA version)
-REM - PaddleOCR
+REM - Flash Attention 2.7.4 (Windows prebuilt wheel for torch 2.7.0 + CUDA 12.8)
+REM - H2OVL-Mississippi dependencies (transformers, accelerate, timm, peft)
+REM - RapidOCR (CPU via ONNX Runtime, no GPU needed)
+REM
+REM NOTE: This configuration (PyTorch 2.7.0 + CUDA 12.8 + Flash Attention 2.7.4)
+REM is the tested and working setup. Other versions may have compatibility issues.
 
 echo ========================================
 echo GPU Requirements Installation
 echo ========================================
 echo.
 
-echo [1/5] Installing PyTorch 2.7.0 with CUDA 12.8...
+echo [1/4] Installing PyTorch 2.7.0 with CUDA 12.8...
 uv pip install torch==2.7.0 torchvision==0.22.0 torchaudio==2.7.0 --index-url https://download.pytorch.org/whl/cu128
 if errorlevel 1 (
     echo ERROR: Failed to install PyTorch
@@ -27,16 +29,26 @@ if errorlevel 1 (
 )
 
 echo.
-echo [2/5] Installing Flash Attention 2 (Windows prebuilt wheel)...
-uv pip install "https://huggingface.co/lldacing/flash-attention-windows-wheel/resolve/main/flash_attn-2.7.4.post1%2Bcu128torch2.7.0cxx11abiFALSE-cp312-cp312-win_amd64.whl"
+echo [2/4] Installing Flash Attention 2.7.4 (Windows prebuilt wheel)...
+REM Use Python to download (handles URL encoding properly), then install with uv
+REM Download with proper filename to avoid uv pip install issues
+python -c "import urllib.request, os, shutil; temp_dir = os.environ.get('TEMP', '.'); src = os.path.join(temp_dir, 'flash_attn_temp.whl'); dst = os.path.join(temp_dir, 'flash_attn-2.7.4.post1+cu128torch2.7.0cxx11abiFALSE-cp312-cp312-win_amd64.whl'); urllib.request.urlretrieve('https://huggingface.co/lldacing/flash-attention-windows-wheel/resolve/main/flash_attn-2.7.4.post1+cu128torch2.7.0cxx11abiFALSE-cp312-cp312-win_amd64.whl', src); shutil.move(src, dst); print(f'Downloaded: {dst}')"
 if errorlevel 1 (
-    echo ERROR: Failed to install Flash Attention
+    echo ERROR: Failed to download Flash Attention wheel
     pause
     exit /b 1
 )
+uv pip install "%TEMP%\flash_attn-2.7.4.post1+cu128torch2.7.0cxx11abiFALSE-cp312-cp312-win_amd64.whl"
+if errorlevel 1 (
+    echo ERROR: Failed to install Flash Attention
+    del "%TEMP%\flash_attn-2.7.4.post1+cu128torch2.7.0cxx11abiFALSE-cp312-cp312-win_amd64.whl" 2>nul
+    pause
+    exit /b 1
+)
+del "%TEMP%\flash_attn-2.7.4.post1+cu128torch2.7.0cxx11abiFALSE-cp312-cp312-win_amd64.whl" 2>nul
 
 echo.
-echo [3/5] Installing H2OVL-Mississippi dependencies...
+echo [3/4] Installing H2OVL-Mississippi dependencies...
 uv pip install transformers accelerate timm peft
 if errorlevel 1 (
     echo ERROR: Failed to install H2OVL dependencies
@@ -45,20 +57,10 @@ if errorlevel 1 (
 )
 
 echo.
-echo [4/5] Installing PaddlePaddle GPU...
-echo NOTE: This script uses CUDA 12.9. If you have a different CUDA version, edit this script.
-echo Available versions: cu129, cu128, cu121, cu118, or cu102 (from PyPI)
-uv pip install --pre paddlepaddle-gpu -i https://www.paddlepaddle.org.cn/packages/nightly/cu128/
+echo [4/4] Installing RapidOCR (CPU via ONNX Runtime)...
+uv pip install rapidocr-onnxruntime
 if errorlevel 1 (
-    echo WARNING: Failed to install PaddlePaddle GPU. Trying alternative...
-    uv pip install paddlepaddle-gpu==2.6.2
-)
-
-echo.
-echo [5/5] Installing PaddleOCR...
-uv pip install paddleocr
-if errorlevel 1 (
-    echo ERROR: Failed to install PaddleOCR
+    echo ERROR: Failed to install RapidOCR
     pause
     exit /b 1
 )
@@ -70,7 +72,7 @@ echo ========================================
 echo.
 echo Verify installation:
 echo   python -c "import torch; print(f'PyTorch: {torch.__version__}, CUDA: {torch.cuda.is_available()}')"
-echo   python -c "import paddle; print(f'PaddlePaddle: {paddle.__version__}, Device: {paddle.device.get_device()}')"
+echo   python -c "from rapidocr_onnxruntime import RapidOCR; print('RapidOCR: Installed successfully')"
 echo.
 pause
 

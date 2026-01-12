@@ -91,7 +91,8 @@ def detect_text_regions(image, min_width=30, min_height=30):
                                           min_width=min_width, min_height=min_height)
         
         # Sort regions by reading order (top-to-bottom, left-to-right for English)
-        text_regions = sort_text_regions_by_reading_order(text_regions, direction='hor_ltr')
+        # Note: This is a fallback sort, the main sorting happens in worker.py with config
+        text_regions = sort_text_regions_by_reading_order(text_regions, direction='horizontal_ltr')
         
         return text_regions
     except Exception as e:

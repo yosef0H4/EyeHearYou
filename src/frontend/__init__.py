@@ -15,3 +15,4 @@ def main():
 
 __all__ = ['main', 'OCRWindow']
 
+
