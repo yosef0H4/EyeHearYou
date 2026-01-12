@@ -15,7 +15,7 @@ from PyQt6.QtGui import QPixmap, QImage, QPen, QColor, QBrush, QPainter, QFont, 
 from src.backend.core.config import load_config, CONFIG_FILE
 from src.backend.core.capture import capture_screenshot
 from src.backend.state import state
-from src.frontend.widgets import DetectionVizWidget, MergeVizWidget, ResizeVizWidget
+from src.frontend.widgets import UnifiedSettingsViz, ResizeVizWidget
 from src.frontend.worker import OCRWorker
 from src.frontend.theme import DARK_THEME_STYLESHEET
 from src.frontend.constants import KEYBOARD_AVAILABLE, CLIPBOARD_AVAILABLE, keyboard, pyperclip
@@ -25,7 +25,7 @@ class OCRWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Visual Novel OCR - Settings Tuner")
-        self.resize(1400, 900)
+        self.resize(1400, 950)
         self.config = load_config()
         self.worker: Optional[OCRWorker] = None
         self.filtered_boxes: List[Tuple[int, int, int, int]] = []
@@ -51,29 +51,23 @@ class OCRWindow(QMainWindow):
         scroll_area.setWidgetResizable(True)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        scroll_area.setMinimumWidth(350)
-        scroll_area.setMaximumWidth(450)
+        scroll_area.setMinimumWidth(380)
+        scroll_area.setMaximumWidth(480)
         
         # Create the controls widget
         controls_widget = QWidget()
         controls_layout = QVBoxLayout(controls_widget)
-        controls_layout.setSpacing(10)
+        controls_layout.setSpacing(15)
         controls_layout.setContentsMargins(10, 10, 10, 10)
 
-        # API Settings Group
+        # 1. API Settings Group
         self.create_api_group(controls_layout)
 
-        # New Preprocessing Group
-        self.create_image_preprocessing_group(controls_layout)
+        # 2. Image Adjustments Group (Consolidated)
+        self.create_image_settings_group(controls_layout)
 
-        # Preprocessing Group (Legacy/Size)
-        self.create_preprocessing_group(controls_layout)
-
-        # Detection Settings Group
-        self.create_detection_group(controls_layout)
-
-        # Merge Settings Group
-        self.create_merge_group(controls_layout)
+        # 3. Text Processing Group (Consolidated Detection + Merge)
+        self.create_text_processing_group(controls_layout)
 
         # Buttons
         btn_layout = QVBoxLayout()
@@ -138,7 +132,7 @@ class OCRWindow(QMainWindow):
         # Add to splitter
         splitter.addWidget(scroll_area)
         splitter.addWidget(preview_widget)
-        splitter.setSizes([400, 1000])
+        splitter.setSizes([420, 980])
 
         # Apply dark theme
         self.apply_dark_theme()
@@ -178,163 +172,136 @@ class OCRWindow(QMainWindow):
         group.setLayout(g_layout)
         layout.addWidget(group)
 
-    def create_image_preprocessing_group(self, layout):
-        """Create OpenCV-based Image Preprocessing settings group"""
+    def create_image_settings_group(self, layout):
+        """Combined Image Settings (Size + Preprocessing)"""
         group = QGroupBox("Image Adjustments")
         g_layout = QVBoxLayout()
         pp_config = self.config.get("preprocessing", {})
 
-        # 1. Invert Checkbox
-        chk_layout = QHBoxLayout()
-        self.chk_invert = QComboBox()
-        self.chk_invert.addItem("Normal Colors", False)
-        self.chk_invert.addItem("Invert Colors", True)
-        self.chk_invert.setCurrentIndex(1 if pp_config.get("invert", False) else 0)
+        # --- Sub-section: Resizing ---
+        resize_layout = QHBoxLayout()
         
-        self.chk_invert.currentIndexChanged.connect(
-            lambda idx: self.update_pp("invert", bool(self.chk_invert.currentData()))
-        )
-        chk_layout.addWidget(QLabel("Colors:"))
-        chk_layout.addWidget(self.chk_invert)
-        g_layout.addLayout(chk_layout)
+        # Visualizer (Left)
+        viz_container = QWidget()
+        viz_container.setStyleSheet("background: #000; border: 1px dashed #555; border-radius: 4px;")
+        viz_box = QVBoxLayout(viz_container)
+        viz_box.setContentsMargins(2, 2, 2, 2)
+        self.resize_viz = ResizeVizWidget()
+        viz_box.addWidget(self.resize_viz, alignment=Qt.AlignmentFlag.AlignCenter)
+        resize_layout.addWidget(viz_container)
 
-        # 2. Binary Threshold (0 = Disabled)
-        thresh_layout = QHBoxLayout()
-        thresh_label = QLabel("Binary Threshold:")
+        # Controls (Right)
+        resize_ctrls = QVBoxLayout()
+        current_dim = self.config.get("max_image_dimension", 1080)
         
-        thresh_slider = QSlider(Qt.Orientation.Horizontal)
-        thresh_slider.setRange(0, 255)
-        thresh_slider.setValue(pp_config.get("binary_threshold", 0))
+        lbl_dim = QLabel("Max Dimension:")
+        dim_slider = QSlider(Qt.Orientation.Horizontal)
+        dim_slider.setRange(320, 2560)
+        dim_slider.setValue(current_dim)
         
-        thresh_spin = QSpinBox()
-        thresh_spin.setMinimum(0)
-        thresh_spin.setMaximum(255)
-        thresh_spin.setValue(pp_config.get("binary_threshold", 0))
-        thresh_spin.setMaximumWidth(80)
-        
-        def on_thresh_slider_change(v):
-            if "preprocessing" not in self.config:
-                self.config["preprocessing"] = {}
-            self.config["preprocessing"]["binary_threshold"] = v
-            thresh_spin.blockSignals(True)
-            thresh_spin.setValue(v)
-            thresh_spin.blockSignals(False)
-        
-        def on_thresh_spin_change(v):
-            thresh_slider.blockSignals(True)
-            thresh_slider.setValue(v)
-            thresh_slider.blockSignals(False)
-            if "preprocessing" not in self.config:
-                self.config["preprocessing"] = {}
-            self.config["preprocessing"]["binary_threshold"] = v
-            self.save_and_refresh()
-        
-        thresh_slider.valueChanged.connect(on_thresh_slider_change)
-        thresh_slider.sliderReleased.connect(self.save_and_refresh)
-        thresh_spin.valueChanged.connect(on_thresh_spin_change)
-        thresh_spin.editingFinished.connect(self.save_and_refresh)
-        
-        thresh_layout.addWidget(thresh_label)
-        thresh_layout.addWidget(thresh_slider)
-        thresh_layout.addWidget(thresh_spin)
-        g_layout.addLayout(thresh_layout)
-        g_layout.addWidget(QLabel("(0 = Disabled). Helps separate text from background."))
+        dim_spin = QSpinBox()
+        dim_spin.setRange(1, 99999)
+        dim_spin.setValue(current_dim)
+        dim_spin.setSuffix(" px")
+        dim_spin.setMaximumWidth(70)
 
-        # 3. Contrast (1.0 = Normal)
-        cont_layout = QHBoxLayout()
-        cont_label = QLabel("Contrast:")
-        
-        cont_slider = QSlider(Qt.Orientation.Horizontal)
-        cont_slider.setRange(5, 30) # 0.5 to 3.0
-        cont_slider.setValue(int(pp_config.get("contrast", 1.0) * 10))
-        
-        cont_spin = QDoubleSpinBox()
-        cont_spin.setMinimum(0.5)
-        cont_spin.setMaximum(3.0)
-        cont_spin.setSingleStep(0.1)
-        cont_spin.setDecimals(1)
-        cont_spin.setValue(pp_config.get("contrast", 1.0))
-        cont_spin.setMaximumWidth(80)
-        
-        def on_cont_slider_change(v):
-            val = v / 10.0
-            if "preprocessing" not in self.config:
-                self.config["preprocessing"] = {}
-            self.config["preprocessing"]["contrast"] = val
-            cont_spin.blockSignals(True)
-            cont_spin.setValue(val)
-            cont_spin.blockSignals(False)
-        
-        def on_cont_spin_change(v):
-            slider_val = int(v * 10)
-            cont_slider.blockSignals(True)
-            cont_slider.setValue(slider_val)
-            cont_slider.blockSignals(False)
-            if "preprocessing" not in self.config:
-                self.config["preprocessing"] = {}
-            self.config["preprocessing"]["contrast"] = v
-            self.save_and_refresh()
-        
-        cont_slider.valueChanged.connect(on_cont_slider_change)
-        cont_slider.sliderReleased.connect(self.save_and_refresh)
-        cont_spin.valueChanged.connect(on_cont_spin_change)
-        cont_spin.editingFinished.connect(self.save_and_refresh)
-        
-        cont_layout.addWidget(cont_label)
-        cont_layout.addWidget(cont_slider)
-        cont_layout.addWidget(cont_spin)
-        g_layout.addLayout(cont_layout)
+        # Callbacks
+        def update_dim(v):
+            self.config["max_image_dimension"] = v
+            self.resize_viz.update_value(v)
 
+        dim_slider.valueChanged.connect(lambda v: [dim_spin.setValue(v), update_dim(v)])
+        dim_slider.sliderReleased.connect(self.save_config)
+        dim_spin.valueChanged.connect(lambda v: [dim_slider.setValue(v), update_dim(v), self.save_config()])
+        
+        # Init Viz
+        self.resize_viz.update_value(current_dim)
+
+        resize_ctrls.addWidget(lbl_dim)
+        resize_ctrls.addWidget(dim_slider)
+        resize_ctrls.addWidget(dim_spin)
+        resize_layout.addLayout(resize_ctrls)
+        
+        g_layout.addLayout(resize_layout)
+        g_layout.addWidget(self.create_separator())
+
+        # --- Sub-section: Preprocessing ---
+        
+        # Helper to create slider rows
+        def add_slider_row(label, key, min_v, max_v, default, scale=1.0, is_float=False):
+            row = QHBoxLayout()
+            row.addWidget(QLabel(label))
+            
+            slider = QSlider(Qt.Orientation.Horizontal)
+            # Map float to int for slider if needed
+            s_min = int(min_v * scale) if is_float else int(min_v)
+            s_max = int(max_v * scale) if is_float else int(max_v)
+            cur_val = pp_config.get(key, default)
+            s_val = int(cur_val * scale) if is_float else int(cur_val)
+            
+            slider.setRange(s_min, s_max)
+            slider.setValue(s_val)
+            
+            if is_float:
+                spin = QDoubleSpinBox()
+                spin.setRange(min_v, max_v)
+                spin.setSingleStep(0.1)
+                spin.setValue(cur_val)
+            else:
+                spin = QSpinBox()
+                spin.setRange(min_v, max_v)
+                spin.setValue(cur_val)
+            spin.setMaximumWidth(70)
+
+            # Sync logic
+            def on_slider(v):
+                val = v / scale if is_float else v
+                spin.blockSignals(True)
+                spin.setValue(val)
+                spin.blockSignals(False)
+                if "preprocessing" not in self.config: self.config["preprocessing"] = {}
+                self.config["preprocessing"][key] = val
+
+            def on_spin(v):
+                s_v = int(v * scale) if is_float else int(v)
+                slider.blockSignals(True)
+                slider.setValue(s_v)
+                slider.blockSignals(False)
+                if "preprocessing" not in self.config: self.config["preprocessing"] = {}
+                self.config["preprocessing"][key] = v
+                self.save_and_refresh()
+
+            slider.valueChanged.connect(on_slider)
+            slider.sliderReleased.connect(self.save_and_refresh)
+            spin.valueChanged.connect(on_spin)
+            spin.editingFinished.connect(self.save_and_refresh)
+            
+            row.addWidget(slider)
+            row.addWidget(spin)
+            g_layout.addLayout(row)
+
+        # 1. Invert
+        chk_invert = QComboBox()
+        chk_invert.addItem("Normal Colors", False)
+        chk_invert.addItem("Invert Colors", True)
+        chk_invert.setCurrentIndex(1 if pp_config.get("invert", False) else 0)
+        chk_invert.currentIndexChanged.connect(lambda: self.update_pp("invert", bool(chk_invert.currentData())))
+        inv_layout = QHBoxLayout()
+        inv_layout.addWidget(QLabel("Colors:"))
+        inv_layout.addWidget(chk_invert)
+        g_layout.addLayout(inv_layout)
+
+        # 2. Threshold
+        add_slider_row("Bin. Threshold:", "binary_threshold", 0, 255, 0)
+        
+        # 3. Contrast
+        add_slider_row("Contrast:", "contrast", 0.5, 3.0, 1.0, scale=10.0, is_float=True)
+        
         # 4. Brightness
-        bright_layout = QHBoxLayout()
-        bright_label = QLabel("Brightness:")
+        add_slider_row("Brightness:", "brightness", -100, 100, 0)
         
-        bright_slider = QSlider(Qt.Orientation.Horizontal)
-        bright_slider.setRange(-100, 100)
-        bright_slider.setValue(pp_config.get("brightness", 0))
-        
-        bright_spin = QSpinBox()
-        bright_spin.setMinimum(-100)
-        bright_spin.setMaximum(100)
-        bright_spin.setValue(pp_config.get("brightness", 0))
-        bright_spin.setMaximumWidth(80)
-        
-        def on_bright_slider_change(v):
-            if "preprocessing" not in self.config:
-                self.config["preprocessing"] = {}
-            self.config["preprocessing"]["brightness"] = v
-            bright_spin.blockSignals(True)
-            bright_spin.setValue(v)
-            bright_spin.blockSignals(False)
-        
-        def on_bright_spin_change(v):
-            bright_slider.blockSignals(True)
-            bright_slider.setValue(v)
-            bright_slider.blockSignals(False)
-            if "preprocessing" not in self.config:
-                self.config["preprocessing"] = {}
-            self.config["preprocessing"]["brightness"] = v
-            self.save_and_refresh()
-        
-        bright_slider.valueChanged.connect(on_bright_slider_change)
-        bright_slider.sliderReleased.connect(self.save_and_refresh)
-        bright_spin.valueChanged.connect(on_bright_spin_change)
-        bright_spin.editingFinished.connect(self.save_and_refresh)
-        
-        bright_layout.addWidget(bright_label)
-        bright_layout.addWidget(bright_slider)
-        bright_layout.addWidget(bright_spin)
-        g_layout.addLayout(bright_layout)
-
         # 5. Dilation
-        dil_layout = QHBoxLayout()
-        dil_layout.addWidget(QLabel("Text Thickness (Dilation):"))
-        self.dil_spin = QSpinBox()
-        self.dil_spin.setRange(0, 5)
-        self.dil_spin.setValue(pp_config.get("dilation", 0))
-        self.dil_spin.valueChanged.connect(lambda v: self.update_pp("dilation", v))
-        dil_layout.addWidget(self.dil_spin)
-        g_layout.addLayout(dil_layout)
+        add_slider_row("Thicken Text:", "dilation", 0, 5, 0)
 
         group.setLayout(g_layout)
         layout.addWidget(group)
@@ -346,88 +313,6 @@ class OCRWindow(QMainWindow):
         self.config["preprocessing"][key] = value
         self.save_and_refresh()
 
-    def update_pp_slider(self, key, value, label, fmt="{}"):
-        """Update label and config for sliders"""
-        label.setText(fmt.format(value))
-        if "preprocessing" not in self.config:
-            self.config["preprocessing"] = {}
-        self.config["preprocessing"][key] = value
-
-    def create_preprocessing_group(self, layout):
-        """Create Image Processing settings group with pixelation preview"""
-        group = QGroupBox("Image Size (Tokens)")
-        g_layout = QVBoxLayout()
-
-        # Visualizer
-        viz_container = QWidget()
-        viz_container.setStyleSheet("background: #000; border: 1px dashed #555; border-radius: 4px;")
-        viz_layout = QVBoxLayout(viz_container)
-        viz_layout.setContentsMargins(0, 5, 0, 5)
-        self.resize_viz = ResizeVizWidget()
-        viz_layout.addWidget(self.resize_viz, alignment=Qt.AlignmentFlag.AlignCenter)
-        g_layout.addWidget(viz_container)
-
-        # Max Dimension Controls
-        dim_layout = QHBoxLayout()
-        dim_label = QLabel("Max Dimension:")
-        
-        current_dim = self.config.get("max_image_dimension", 1080)
-        
-        dim_slider = QSlider(Qt.Orientation.Horizontal)
-        dim_slider.setMinimum(320)
-        dim_slider.setMaximum(2560)
-        dim_slider.setValue(current_dim)
-        
-        dim_spin = QSpinBox()
-        dim_spin.setMinimum(1)  # Only positive numbers
-        dim_spin.setMaximum(999999)  # Very high limit, effectively unlimited
-        dim_spin.setValue(current_dim)
-        dim_spin.setMinimumWidth(100)
-        dim_spin.setMaximumWidth(120)
-        dim_spin.setSuffix(" px")
-
-        def on_dim_change(v):
-            """Update label and visualizer when dimension changes"""
-            self.config["max_image_dimension"] = v
-            self.resize_viz.update_value(v)
-            
-        def on_slider_move(v):
-            """Handle slider movement"""
-            dim_spin.blockSignals(True)
-            dim_spin.setValue(v)
-            dim_spin.blockSignals(False)
-            on_dim_change(v)
-
-        def on_spin_change(v):
-            """Handle spinbox change"""
-            # Only update slider if value is within slider range
-            if dim_slider.minimum() <= v <= dim_slider.maximum():
-                dim_slider.blockSignals(True)
-                dim_slider.setValue(v)
-                dim_slider.blockSignals(False)
-            on_dim_change(v)
-            self.save_config()  # Save immediately on spinbox finish
-
-        dim_slider.valueChanged.connect(on_slider_move)
-        dim_slider.sliderReleased.connect(self.save_config)
-        dim_spin.valueChanged.connect(on_spin_change)
-
-        dim_layout.addWidget(dim_label)
-        dim_layout.addWidget(dim_slider)
-        dim_layout.addWidget(dim_spin)
-        
-        g_layout.addLayout(dim_layout)
-        
-        info_label = QLabel("Resizes image before sending to API to save tokens/costs. Lower values = more pixelated.")
-        info_label.setStyleSheet("font-size: 10px; color: #888; font-style: italic;")
-        info_label.setWordWrap(True)
-        g_layout.addWidget(info_label)
-
-        # Initialize viz
-        self.resize_viz.update_value(current_dim)
-
-        group.setLayout(g_layout)
-        layout.addWidget(group)
 
     def create_separator(self):
         """Create a horizontal separator line"""
@@ -450,130 +335,104 @@ class OCRWindow(QMainWindow):
             self.config["reading_direction"] = "rtl"
         self.save_and_refresh()
 
-    def create_detection_group(self, layout):
-        group = QGroupBox("Detection Settings (RapidOCR)")
+    def create_text_processing_group(self, layout):
+        """Combined Detection and Merging Settings"""
+        group = QGroupBox("Text Detection & Merging")
         g_layout = QVBoxLayout()
-
         td_config = self.config.get("text_detection", {})
-
-        # Mini Visualizer
+        
+        # --- Shared Visualizer ---
         viz_container = QWidget()
-        viz_container.setMinimumHeight(120)
-        viz_container.setMaximumHeight(120)
-        viz_container.setStyleSheet("background: #000; border: 1px dashed #555; border-radius: 4px;")
-        viz_layout = QVBoxLayout(viz_container)
-        viz_layout.setContentsMargins(0, 0, 0, 0)
-        self.detection_viz = DetectionVizWidget()
-        viz_layout.addWidget(self.detection_viz, alignment=Qt.AlignmentFlag.AlignCenter)
+        viz_container.setMinimumHeight(160)
+        viz_container.setStyleSheet("background: #151515; border: 1px solid #333; border-radius: 6px;")
+        viz_box = QHBoxLayout(viz_container)
+        
+        # Add the visualizer
+        self.settings_viz = UnifiedSettingsViz()
+        viz_box.addStretch()
+        viz_box.addWidget(self.settings_viz)
+        viz_box.addStretch()
+        
+        # Add legend/info next to it
+        legend = QLabel("🟥 Red: Min Size Filter\n🟨 Yellow: Merge Zone\n🟦 Blue: Reference Box")
+        legend.setStyleSheet("color: #aaa; font-size: 10px;")
+        viz_box.addWidget(legend)
+        
         g_layout.addWidget(viz_container)
+        g_layout.addSpacing(10)
+
+        # --- Helper for sections ---
+        def add_header(text):
+            lbl = QLabel(text)
+            lbl.setStyleSheet("font-weight: bold; color: #007acc; margin-top: 5px;")
+            g_layout.addWidget(lbl)
+
+        # --- Section 1: Detection (Size) ---
+        add_header("1. Detection Filter (RapidOCR)")
+        
+        def update_viz_detection():
+            w = self.config["text_detection"].get("min_width", 30)
+            h = self.config["text_detection"].get("min_height", 30)
+            self.settings_viz.update_detection(w, h)
 
         # Min Width
-        width_layout = QHBoxLayout()
-        width_label_text = QLabel("Min Width:")
-        width_slider = QSlider(Qt.Orientation.Horizontal)
-        width_slider.setMinimum(5)
-        width_slider.setMaximum(300)
-        width_slider.setValue(td_config.get("min_width", 30))
-        width_spin = QSpinBox()
-        width_spin.setMinimum(5)
-        width_spin.setMaximum(1000)  # Allow higher values than slider
-        width_spin.setValue(td_config.get("min_width", 30))
-        width_spin.setMaximumWidth(80)
-        width_spin.setSuffix(" px")
-        
-        def on_width_slider_change(v):
-            if "text_detection" not in self.config:
-                self.config["text_detection"] = {}
+        w_row = QHBoxLayout()
+        w_row.addWidget(QLabel("Min Width:"))
+        w_sl = QSlider(Qt.Orientation.Horizontal)
+        w_sl.setRange(5, 300)
+        w_sl.setValue(td_config.get("min_width", 30))
+        w_sp = QSpinBox()
+        w_sp.setRange(5, 1000)
+        w_sp.setValue(td_config.get("min_width", 30))
+        w_sp.setSuffix(" px")
+        w_sp.setMaximumWidth(70)
+
+        def on_w_change(v):
+            if "text_detection" not in self.config: self.config["text_detection"] = {}
             self.config["text_detection"]["min_width"] = v
-            width_spin.blockSignals(True)
-            width_spin.setValue(v)
-            width_spin.blockSignals(False)
-            self.update_detection_viz()
+            w_sl.blockSignals(True); w_sl.setValue(v); w_sl.blockSignals(False)
+            w_sp.blockSignals(True); w_sp.setValue(v); w_sp.blockSignals(False)
+            update_viz_detection()
         
-        def on_width_spin_change(v):
-            clamped = max(5, min(300, v))
-            width_slider.blockSignals(True)
-            width_slider.setValue(clamped)
-            width_slider.blockSignals(False)
-            if "text_detection" not in self.config:
-                self.config["text_detection"] = {}
-            self.config["text_detection"]["min_width"] = v
-            self.update_detection_viz()
-            self.save_and_refresh()
-        
-        width_slider.valueChanged.connect(on_width_slider_change)
-        width_slider.sliderReleased.connect(self.save_and_refresh)
-        width_spin.valueChanged.connect(on_width_spin_change)
-        width_spin.editingFinished.connect(self.save_and_refresh)
-        
-        width_layout.addWidget(width_label_text)
-        width_layout.addWidget(width_slider)
-        width_layout.addWidget(width_spin)
-        g_layout.addLayout(width_layout)
+        w_sl.valueChanged.connect(on_w_change)
+        w_sl.sliderReleased.connect(self.save_and_refresh)
+        w_sp.valueChanged.connect(on_w_change)
+        w_sp.editingFinished.connect(self.save_and_refresh)
+        w_row.addWidget(w_sl); w_row.addWidget(w_sp)
+        g_layout.addLayout(w_row)
 
         # Min Height
-        height_layout = QHBoxLayout()
-        height_label_text = QLabel("Min Height:")
-        height_slider = QSlider(Qt.Orientation.Horizontal)
-        height_slider.setMinimum(5)
-        height_slider.setMaximum(300)
-        height_slider.setValue(td_config.get("min_height", 30))
-        height_spin = QSpinBox()
-        height_spin.setMinimum(5)
-        height_spin.setMaximum(1000)
-        height_spin.setValue(td_config.get("min_height", 30))
-        height_spin.setMaximumWidth(80)
-        height_spin.setSuffix(" px")
-        
-        def on_height_slider_change(v):
-            if "text_detection" not in self.config:
-                self.config["text_detection"] = {}
+        h_row = QHBoxLayout()
+        h_row.addWidget(QLabel("Min Height:"))
+        h_sl = QSlider(Qt.Orientation.Horizontal)
+        h_sl.setRange(5, 300)
+        h_sl.setValue(td_config.get("min_height", 30))
+        h_sp = QSpinBox()
+        h_sp.setRange(5, 1000)
+        h_sp.setValue(td_config.get("min_height", 30))
+        h_sp.setSuffix(" px")
+        h_sp.setMaximumWidth(70)
+
+        def on_h_change(v):
+            if "text_detection" not in self.config: self.config["text_detection"] = {}
             self.config["text_detection"]["min_height"] = v
-            height_spin.blockSignals(True)
-            height_spin.setValue(v)
-            height_spin.blockSignals(False)
-            self.update_detection_viz()
+            h_sl.blockSignals(True); h_sl.setValue(v); h_sl.blockSignals(False)
+            h_sp.blockSignals(True); h_sp.setValue(v); h_sp.blockSignals(False)
+            update_viz_detection()
+            
+        h_sl.valueChanged.connect(on_h_change)
+        h_sl.sliderReleased.connect(self.save_and_refresh)
+        h_sp.valueChanged.connect(on_h_change)
+        h_sp.editingFinished.connect(self.save_and_refresh)
+        h_row.addWidget(h_sl); h_row.addWidget(h_sp)
+        g_layout.addLayout(h_row)
+
+        g_layout.addWidget(self.create_separator())
+
+        # --- Section 2: Merging ---
+        add_header("2. Merging & Reading Order")
         
-        def on_height_spin_change(v):
-            clamped = max(5, min(300, v))
-            height_slider.blockSignals(True)
-            height_slider.setValue(clamped)
-            height_slider.blockSignals(False)
-            if "text_detection" not in self.config:
-                self.config["text_detection"] = {}
-            self.config["text_detection"]["min_height"] = v
-            self.update_detection_viz()
-            self.save_and_refresh()
-        
-        height_slider.valueChanged.connect(on_height_slider_change)
-        height_slider.sliderReleased.connect(self.save_and_refresh)
-        height_spin.valueChanged.connect(on_height_spin_change)
-        height_spin.editingFinished.connect(self.save_and_refresh)
-        
-        height_layout.addWidget(height_label_text)
-        height_layout.addWidget(height_slider)
-        height_layout.addWidget(height_spin)
-        g_layout.addLayout(height_layout)
-
-        # Store references for later updates
-        self.width_slider = width_slider
-        self.height_slider = height_slider
-        self.width_spin = width_spin
-        self.height_spin = height_spin
-
-        # Initialize visualizer
-        self.update_detection_viz()
-
-        group.setLayout(g_layout)
-        layout.addWidget(group)
-
-    def create_merge_group(self, layout):
-        group = QGroupBox("Merge & Ordering")
-        g_layout = QVBoxLayout()
-
-        td_config = self.config.get("text_detection", {})
-
-        # Reading Direction Control (New enhanced version)
+        # Reading Direction
         sort_config = self.config.get("text_sorting", {})
         if not sort_config:
             # Initialize if missing
@@ -584,275 +443,123 @@ class OCRWindow(QMainWindow):
             self.config["text_sorting"]["direction"] = "horizontal_ltr" if legacy_dir == "ltr" else "horizontal_rtl"
             self.config["text_sorting"]["group_tolerance"] = 0.8
             sort_config = self.config["text_sorting"]
-        
-        order_layout = QHBoxLayout()
-        order_layout.addWidget(QLabel("Reading Direction:"))
-        
+        dir_row = QHBoxLayout()
+        dir_row.addWidget(QLabel("Order:"))
         self.order_combo = QComboBox()
         self.order_combo.addItem("Left to Right (Standard)", "horizontal_ltr")
         self.order_combo.addItem("Right to Left (Manga)", "horizontal_rtl")
-        self.order_combo.addItem("Vertical Columns (Traditional)", "vertical_rtl")
+        self.order_combo.addItem("Vertical Columns (RTL)", "vertical_rtl")
         self.order_combo.addItem("Vertical Columns (LTR)", "vertical_ltr")
         
-        # Set current value
-        current_dir = sort_config.get("direction", "horizontal_ltr")
-        index = self.order_combo.findData(current_dir)
-        if index >= 0:
-            self.order_combo.setCurrentIndex(index)
-        
+        cur_dir = sort_config.get("direction", "horizontal_ltr")
+        idx = self.order_combo.findData(cur_dir)
+        if idx >= 0: self.order_combo.setCurrentIndex(idx)
         self.order_combo.currentIndexChanged.connect(self.on_order_changed)
-        order_layout.addWidget(self.order_combo)
-        order_layout.addStretch()
-        
-        g_layout.addLayout(order_layout)
-        
-        # Grouping Tolerance Control
-        grp_layout = QHBoxLayout()
-        grp_label = QLabel("Line Grouping:")
-        grp_slider = QSlider(Qt.Orientation.Horizontal)
-        grp_slider.setMinimum(1)   # 0.1
-        grp_slider.setMaximum(20)  # 2.0
-        grp_slider.setValue(int(sort_config.get("group_tolerance", 0.8) * 10))
-        
-        grp_spin = QSpinBox()
-        grp_spin.setMinimum(1)
-        grp_spin.setMaximum(20)
-        grp_spin.setValue(int(sort_config.get("group_tolerance", 0.8) * 10))
-        grp_spin.setMinimumWidth(100)
-        grp_spin.setMaximumWidth(120)
-        grp_spin.setSuffix(" (×0.1)")
-        
-        def on_grp_slider_change(v):
-            val = v / 10.0
-            grp_spin.blockSignals(True)
-            grp_spin.setValue(v)
-            grp_spin.blockSignals(False)
-            if "text_sorting" not in self.config:
-                self.config["text_sorting"] = {}
-            self.config["text_sorting"]["group_tolerance"] = val
-        
-        def on_grp_spin_change(v):
-            clamped = max(1, min(20, v))
-            grp_slider.blockSignals(True)
-            grp_slider.setValue(clamped)
-            grp_slider.blockSignals(False)
-            val = clamped / 10.0
-            if "text_sorting" not in self.config:
-                self.config["text_sorting"] = {}
-            self.config["text_sorting"]["group_tolerance"] = val
-            self.save_and_refresh()
-        
-        grp_slider.valueChanged.connect(on_grp_slider_change)
-        grp_slider.sliderReleased.connect(self.save_and_refresh)
-        grp_spin.valueChanged.connect(on_grp_spin_change)
-        grp_spin.editingFinished.connect(self.save_and_refresh)
-        
-        grp_layout.addWidget(grp_label)
-        grp_layout.addWidget(grp_slider)
-        grp_layout.addWidget(grp_spin)
-        g_layout.addLayout(grp_layout)
-        
-        info_grp = QLabel("Controls how strictly boxes must align to be in the same row/column. Lower = stricter grouping.")
-        info_grp.setStyleSheet("font-size: 10px; color: #888; font-style: italic;")
-        info_grp.setWordWrap(True)
-        g_layout.addWidget(info_grp)
-        
-        g_layout.addWidget(self.create_separator())
+        dir_row.addWidget(self.order_combo, 1)
+        g_layout.addLayout(dir_row)
 
-        # Mini Visualizer
-        viz_container = QWidget()
-        viz_container.setMinimumHeight(120)
-        viz_container.setMaximumHeight(120)
-        viz_container.setStyleSheet("background: #000; border: 1px dashed #555; border-radius: 4px;")
-        viz_layout = QVBoxLayout(viz_container)
-        viz_layout.setContentsMargins(0, 0, 0, 0)
-        self.merge_viz = MergeVizWidget()
-        viz_layout.addWidget(self.merge_viz, alignment=Qt.AlignmentFlag.AlignCenter)
-        g_layout.addWidget(viz_container)
+        # Viz Update Logic for Merge
+        def update_viz_merge():
+            vt = self.config["text_detection"].get("merge_vertical_tolerance", 30)
+            ht = self.config["text_detection"].get("merge_horizontal_tolerance", 50)
+            rat = self.config["text_detection"].get("merge_width_ratio_threshold", 0.3)
+            self.settings_viz.update_merge(vt, ht, rat)
 
-        # Vertical Tolerance
-        vtol_layout = QHBoxLayout()
-        vtol_label_text = QLabel("Vertical Tolerance:")
-        vtol_slider = QSlider(Qt.Orientation.Horizontal)
-        vtol_slider.setMinimum(0)
-        vtol_slider.setMaximum(300)
-        vtol_slider.setValue(td_config.get("merge_vertical_tolerance", 30))
-        vtol_spin = QSpinBox()
-        vtol_spin.setMinimum(0)
-        vtol_spin.setMaximum(1000)
-        vtol_spin.setValue(td_config.get("merge_vertical_tolerance", 30))
-        vtol_spin.setMaximumWidth(80)
-        vtol_spin.setSuffix(" px")
-        
-        def on_vtol_slider_change(v):
-            if "text_detection" not in self.config:
-                self.config["text_detection"] = {}
-            self.config["text_detection"]["merge_vertical_tolerance"] = v
-            vtol_spin.blockSignals(True)
-            vtol_spin.setValue(v)
-            vtol_spin.blockSignals(False)
-            self.update_merge_viz()
-        
-        def on_vtol_spin_change(v):
-            clamped = max(0, min(300, v))
-            vtol_slider.blockSignals(True)
-            vtol_slider.setValue(clamped)
-            vtol_slider.blockSignals(False)
-            if "text_detection" not in self.config:
-                self.config["text_detection"] = {}
-            self.config["text_detection"]["merge_vertical_tolerance"] = v
-            self.update_merge_viz()
-            self.save_and_refresh()
-        
-        vtol_slider.valueChanged.connect(on_vtol_slider_change)
-        vtol_slider.sliderReleased.connect(self.save_and_refresh)
-        vtol_spin.valueChanged.connect(on_vtol_spin_change)
-        vtol_spin.editingFinished.connect(self.save_and_refresh)
-        
-        vtol_layout.addWidget(vtol_label_text)
-        vtol_layout.addWidget(vtol_slider)
-        vtol_layout.addWidget(vtol_spin)
-        g_layout.addLayout(vtol_layout)
-        info_vtol = QLabel("Max vertical gap between boxes to merge (px)")
-        info_vtol.setStyleSheet("font-size: 10px; color: #888; font-style: italic;")
-        info_vtol.setWordWrap(True)
-        g_layout.addWidget(info_vtol)
+        # Helper for merge sliders
+        def add_merge_slider(label, key, default, max_val=300, is_float=False):
+            row = QHBoxLayout()
+            row.addWidget(QLabel(label))
+            
+            sl = QSlider(Qt.Orientation.Horizontal)
+            sp = QDoubleSpinBox() if is_float else QSpinBox()
+            sp.setMaximumWidth(70)
+            
+            if is_float:
+                sl.setRange(0, 100)
+                sp.setRange(0.0, 1.0)
+                sp.setSingleStep(0.01)
+                val = td_config.get(key, default)
+                sl.setValue(int(val * 100))
+                sp.setValue(val)
+            else:
+                sl.setRange(0, max_val)
+                sp.setRange(0, 1000)
+                sp.setSuffix(" px")
+                val = td_config.get(key, default)
+                sl.setValue(val)
+                sp.setValue(val)
+            
+            def on_change(v):
+                real_val = v / 100.0 if is_float else v
+                if "text_detection" not in self.config: self.config["text_detection"] = {}
+                self.config["text_detection"][key] = real_val
+                
+                # Update UI counterparts
+                if is_float:
+                    sl.blockSignals(True); sl.setValue(int(real_val*100)); sl.blockSignals(False)
+                    sp.blockSignals(True); sp.setValue(real_val); sp.blockSignals(False)
+                else:
+                    sl.blockSignals(True); sl.setValue(real_val); sl.blockSignals(False)
+                    sp.blockSignals(True); sp.setValue(real_val); sp.blockSignals(False)
+                
+                update_viz_merge()
+            
+            if is_float:
+                sl.valueChanged.connect(on_change)
+                sp.valueChanged.connect(on_change) # Double spin box emits float
+            else:
+                sl.valueChanged.connect(on_change)
+                sp.valueChanged.connect(on_change)
 
-        # Horizontal Tolerance
-        htol_layout = QHBoxLayout()
-        htol_label_text = QLabel("Horizontal Tolerance:")
-        htol_slider = QSlider(Qt.Orientation.Horizontal)
-        htol_slider.setMinimum(0)
-        htol_slider.setMaximum(300)
-        htol_slider.setValue(td_config.get("merge_horizontal_tolerance", 50))
-        htol_spin = QSpinBox()
-        htol_spin.setMinimum(0)
-        htol_spin.setMaximum(1000)
-        htol_spin.setValue(td_config.get("merge_horizontal_tolerance", 50))
-        htol_spin.setMaximumWidth(80)
-        htol_spin.setSuffix(" px")
-        
-        def on_htol_slider_change(v):
-            if "text_detection" not in self.config:
-                self.config["text_detection"] = {}
-            self.config["text_detection"]["merge_horizontal_tolerance"] = v
-            htol_spin.blockSignals(True)
-            htol_spin.setValue(v)
-            htol_spin.blockSignals(False)
-            self.update_merge_viz()
-        
-        def on_htol_spin_change(v):
-            clamped = max(0, min(300, v))
-            htol_slider.blockSignals(True)
-            htol_slider.setValue(clamped)
-            htol_slider.blockSignals(False)
-            if "text_detection" not in self.config:
-                self.config["text_detection"] = {}
-            self.config["text_detection"]["merge_horizontal_tolerance"] = v
-            self.update_merge_viz()
-            self.save_and_refresh()
-        
-        htol_slider.valueChanged.connect(on_htol_slider_change)
-        htol_slider.sliderReleased.connect(self.save_and_refresh)
-        htol_spin.valueChanged.connect(on_htol_spin_change)
-        htol_spin.editingFinished.connect(self.save_and_refresh)
-        
-        htol_layout.addWidget(htol_label_text)
-        htol_layout.addWidget(htol_slider)
-        htol_layout.addWidget(htol_spin)
-        g_layout.addLayout(htol_layout)
-        info_htol = QLabel("Max horizontal offset to consider aligned (px)")
-        info_htol.setStyleSheet("font-size: 10px; color: #888; font-style: italic;")
-        info_htol.setWordWrap(True)
-        g_layout.addWidget(info_htol)
+            sl.sliderReleased.connect(self.save_and_refresh)
+            sp.editingFinished.connect(self.save_and_refresh)
+            
+            row.addWidget(sl)
+            row.addWidget(sp)
+            g_layout.addLayout(row)
 
-        # Width Ratio
-        ratio_layout = QHBoxLayout()
-        ratio_label_text = QLabel("Width Ratio Threshold:")
-        ratio_slider = QSlider(Qt.Orientation.Horizontal)
-        ratio_slider.setMinimum(0)
-        ratio_slider.setMaximum(100)
-        ratio_slider.setValue(int(td_config.get("merge_width_ratio_threshold", 0.3) * 100))
-        
-        ratio_spin = QDoubleSpinBox()
-        ratio_spin.setMinimum(0.0)
-        ratio_spin.setMaximum(1.0)
-        ratio_spin.setSingleStep(0.01)
-        ratio_spin.setDecimals(2)
-        ratio_spin.setValue(td_config.get("merge_width_ratio_threshold", 0.3))
-        ratio_spin.setMaximumWidth(80)
-        
-        def on_ratio_slider_change(v):
-            val = v / 100.0
-            if "text_detection" not in self.config:
-                self.config["text_detection"] = {}
-            self.config["text_detection"]["merge_width_ratio_threshold"] = val
-            ratio_spin.blockSignals(True)
-            ratio_spin.setValue(val)
-            ratio_spin.blockSignals(False)
-            self.update_merge_viz()
-        
-        def on_ratio_spin_change(v):
-            slider_val = int(v * 100)
-            ratio_slider.blockSignals(True)
-            ratio_slider.setValue(slider_val)
-            ratio_slider.blockSignals(False)
-            if "text_detection" not in self.config:
-                self.config["text_detection"] = {}
-            self.config["text_detection"]["merge_width_ratio_threshold"] = v
-            self.update_merge_viz()
-            self.save_and_refresh()
-        
-        ratio_slider.valueChanged.connect(on_ratio_slider_change)
-        ratio_slider.sliderReleased.connect(self.save_and_refresh)
-        ratio_spin.valueChanged.connect(on_ratio_spin_change)
-        ratio_spin.editingFinished.connect(self.save_and_refresh)
-        
-        ratio_layout.addWidget(ratio_label_text)
-        ratio_layout.addWidget(ratio_slider)
-        ratio_layout.addWidget(ratio_spin)
-        g_layout.addLayout(ratio_layout)
-        info_ratio = QLabel("Min width similarity ratio (0.0-1.0) to merge boxes")
-        info_ratio.setStyleSheet("font-size: 10px; color: #888; font-style: italic;")
-        info_ratio.setWordWrap(True)
-        g_layout.addWidget(info_ratio)
+        add_merge_slider("V. Tolerance:", "merge_vertical_tolerance", 30)
+        add_merge_slider("H. Tolerance:", "merge_horizontal_tolerance", 50)
+        add_merge_slider("Width Ratio:", "merge_width_ratio_threshold", 0.3, is_float=True)
 
-        # Store references
-        self.vtol_slider = vtol_slider
-        self.htol_slider = htol_slider
-        self.vtol_spin = vtol_spin
-        self.htol_spin = htol_spin
+        # Line Grouping (Sorting)
+        grp_row = QHBoxLayout()
+        grp_row.addWidget(QLabel("Line Grouping:"))
+        g_sl = QSlider(Qt.Orientation.Horizontal)
+        g_sl.setRange(1, 20)
+        grp_val = sort_config.get("group_tolerance", 0.8)
+        g_sl.setValue(int(grp_val * 10))
+        g_sp = QDoubleSpinBox()
+        g_sp.setRange(0.1, 2.0)
+        g_sp.setSingleStep(0.1)
+        g_sp.setValue(grp_val)
+        g_sp.setMaximumWidth(70)
+        
+        def on_grp_change(v):
+            # v can be int (slider) or float (spinbox)
+            real_val = v / 10.0 if isinstance(v, int) else v
+            if "text_sorting" not in self.config: self.config["text_sorting"] = {}
+            self.config["text_sorting"]["group_tolerance"] = real_val
+            
+            g_sl.blockSignals(True); g_sl.setValue(int(real_val*10)); g_sl.blockSignals(False)
+            g_sp.blockSignals(True); g_sp.setValue(real_val); g_sp.blockSignals(False)
+            
+        g_sl.valueChanged.connect(on_grp_change)
+        g_sl.sliderReleased.connect(self.save_and_refresh)
+        g_sp.valueChanged.connect(on_grp_change)
+        g_sp.editingFinished.connect(self.save_and_refresh)
+        
+        grp_row.addWidget(g_sl)
+        grp_row.addWidget(g_sp)
+        g_layout.addLayout(grp_row)
 
-        # Initialize visualizer
-        self.update_merge_viz()
+        # Initial Viz Update
+        update_viz_detection()
+        update_viz_merge()
 
         group.setLayout(g_layout)
         layout.addWidget(group)
 
-    def on_slider_change(self, key: str, value: float, label: QLabel, fmt: str):
-        """Update label and config when slider changes"""
-        label.setText(fmt.format(value))
-        if "text_detection" not in self.config:
-            self.config["text_detection"] = {}
-        self.config["text_detection"][key] = value
-
-    def update_detection_viz(self):
-        """Update detection visualizer"""
-        if hasattr(self, 'detection_viz'):
-            td_config = self.config.get("text_detection", {})
-            width = td_config.get("min_width", 30)
-            height = td_config.get("min_height", 30)
-            # Pass default confidence of 1.0 for visualization (not used for filtering)
-            self.detection_viz.update_values(1.0, width, height)
-
-    def update_merge_viz(self):
-        """Update merge visualizer"""
-        if hasattr(self, 'merge_viz'):
-            td_config = self.config.get("text_detection", {})
-            v_tol = td_config.get("merge_vertical_tolerance", 30)
-            h_tol = td_config.get("merge_horizontal_tolerance", 50)
-            ratio = td_config.get("merge_width_ratio_threshold", 0.3)
-            self.merge_viz.update_values(v_tol, h_tol, ratio)
 
     def update_api_config(self):
         """Update API config from input fields"""

@@ -136,6 +136,95 @@ class MergeVizWidget(QWidget):
                            Qt.AlignmentFlag.AlignCenter, "MIN")
 
 
+class UnifiedSettingsViz(QWidget):
+    """
+    Unified visualizer for Text Detection and Merging settings.
+    Shows:
+    1. Min Width/Height (Red Box)
+    2. Merge Tolerances (Yellow Dashed Zone) around a Reference Box (Blue)
+    """
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setMinimumSize(150, 150)
+        self.setMaximumSize(150, 150)
+        # Detection defaults
+        self.min_width = 30
+        self.min_height = 30
+        # Merge defaults
+        self.v_tol = 30
+        self.h_tol = 50
+        self.ratio = 0.3
+
+    def update_detection(self, min_width: int, min_height: int):
+        self.min_width = min_width
+        self.min_height = min_height
+        self.update()
+
+    def update_merge(self, v_tol: int, h_tol: int, ratio: float):
+        self.v_tol = v_tol
+        self.h_tol = h_tol
+        self.ratio = ratio
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        
+        # Black background
+        painter.fillRect(self.rect(), QColor(20, 20, 20))
+        
+        center_x = self.width() / 2
+        center_y = self.height() / 2
+        
+        # Scale: Map 300px (max slider) to approx 135px widget space
+        # This means 1px in setting = 0.45px in widget
+        scale = 0.45
+        
+        # --- 1. Draw Reference Box (Blue) ---
+        # Represents a "standard" detected text region
+        ref_w = 60 
+        ref_h = 30
+        ref_x = center_x - ref_w / 2
+        ref_y = center_y - ref_h / 2
+        
+        painter.setPen(QPen(QColor(0, 150, 255), 2))
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawRect(int(ref_x), int(ref_y), int(ref_w), int(ref_h))
+        
+        # --- 2. Draw Merge Tolerance Zone (Yellow Dashed) ---
+        # Shows how far we look for neighbors
+        zone_w = ref_w + (self.h_tol * 2 * scale)
+        zone_h = ref_h + (self.v_tol * 2 * scale)
+        zone_x = center_x - zone_w / 2
+        zone_y = center_y - zone_h / 2
+        
+        pen = QPen(QColor(255, 255, 0), 2)
+        pen.setStyle(Qt.PenStyle.DashLine)
+        painter.setPen(pen)
+        painter.setBrush(QBrush(QColor(255, 255, 0, 20)))
+        painter.drawRect(int(zone_x), int(zone_y), int(zone_w), int(zone_h))
+        
+        # --- 3. Draw Min Size Threshold (Red Filled) ---
+        # Shows the minimum size filter. 
+        # Drawn centered to compare against the reference box.
+        min_w_scaled = self.min_width * scale
+        min_h_scaled = self.min_height * scale
+        min_x = center_x - min_w_scaled / 2
+        min_y = center_y - min_h_scaled / 2
+        
+        painter.setPen(QPen(QColor(255, 50, 50), 2))
+        painter.setBrush(QBrush(QColor(255, 50, 50, 100)))
+        painter.drawRect(int(min_x), int(min_y), int(min_w_scaled), int(min_h_scaled))
+        
+        # --- 4. Draw Width Ratio Indicator (Cyan Bar) ---
+        # Visualizes the ratio threshold inside the reference box
+        ratio_w = ref_w * self.ratio
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(QColor(0, 255, 255, 150)))
+        # Draw a small bar at the bottom of the reference box
+        painter.drawRect(int(ref_x), int(ref_y + ref_h - 6), int(ratio_w), 6)
+
+
 class ResizeVizWidget(QWidget):
     """Visualizer for Image Dimension settings showing pixelation effect"""
     def __init__(self, parent=None):
