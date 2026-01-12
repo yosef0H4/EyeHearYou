@@ -56,10 +56,10 @@ def test_merge_close_text_boxes_vertical():
 
 
 def test_merge_close_text_boxes_horizontal_alignment():
-    """Test that boxes must be horizontally aligned to merge"""
+    """Test that boxes that are not aligned and far apart don't merge"""
     regions = [
         (10, 10, 50, 30),   # Left box
-        (100, 35, 140, 55),  # Right box (too far horizontally)
+        (100, 35, 140, 55),  # Right box (too far horizontally, not on same row)
     ]
     
     merged, is_merged, original_groups = merge_close_text_boxes(
@@ -69,16 +69,58 @@ def test_merge_close_text_boxes_horizontal_alignment():
         width_ratio_threshold=0.3
     )
     
-    # Should not merge due to horizontal misalignment
+    # Should not merge: boxes are not on same row (no vertical overlap) 
+    # and not vertically aligned (no horizontal overlap, centers don't align)
+    assert len(merged) == 2
+    assert all(not merged_flag for merged_flag in is_merged)
+
+
+def test_merge_close_text_boxes_horizontal():
+    """Test merging boxes that are horizontally adjacent (words on same line)"""
+    regions = [
+        (10, 10, 40, 30),   # "I" - left word
+        (45, 10, 100, 30),  # "guess" - right word (5px gap, same row, within 50px tolerance)
+    ]
+    
+    merged, is_merged, original_groups = merge_close_text_boxes(
+        regions,
+        vertical_tolerance=30,
+        horizontal_tolerance=50,
+        width_ratio_threshold=0.3
+    )
+    
+    # Should merge because they're on the same row (high vertical overlap)
+    # and the gap (5px) is within horizontal_tolerance (50px)
+    assert len(merged) == 1
+    assert is_merged[0] is True
+    assert merged[0] == (10, 10, 100, 30)  # Union bounding box
+    assert len(original_groups[0]) == 2  # Two boxes merged
+
+
+def test_merge_close_text_boxes_horizontal_large_gap():
+    """Test that boxes on same row but with large gap don't merge"""
+    regions = [
+        (10, 10, 40, 30),   # Left word
+        (200, 10, 240, 30),  # Right word (160px gap, exceeds 50px tolerance)
+    ]
+    
+    merged, is_merged, original_groups = merge_close_text_boxes(
+        regions,
+        vertical_tolerance=30,
+        horizontal_tolerance=50,
+        width_ratio_threshold=0.3
+    )
+    
+    # Should not merge: gap (160px) exceeds horizontal_tolerance (50px)
     assert len(merged) == 2
     assert all(not merged_flag for merged_flag in is_merged)
 
 
 def test_merge_close_text_boxes_width_ratio():
-    """Test that boxes must have similar widths to merge"""
+    """Test that vertically adjacent boxes with horizontal overlap can merge"""
     regions = [
-        (10, 10, 50, 30),    # 40px wide
-        (10, 35, 20, 55),    # 10px wide (ratio = 10/40 = 0.25 < 0.3 threshold)
+        (10, 10, 50, 30),    # 40px wide, top box
+        (10, 35, 20, 55),    # 10px wide, bottom box (5px gap, 10px horizontal overlap)
     ]
     
     merged, is_merged, original_groups = merge_close_text_boxes(
@@ -88,9 +130,10 @@ def test_merge_close_text_boxes_width_ratio():
         width_ratio_threshold=0.3
     )
     
-    # Should not merge due to width ratio
-    assert len(merged) == 2
-    assert all(not merged_flag for merged_flag in is_merged)
+    # Should merge: vertically adjacent (5px gap < 30px tolerance)
+    # and has horizontal overlap (10px > 20% of min width = 2px)
+    assert len(merged) == 1
+    assert is_merged[0] is True
 
 
 def test_merge_close_text_boxes_no_merge():

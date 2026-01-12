@@ -1,17 +1,89 @@
 """Text box merging functionality"""
-from typing import List, Tuple
+from typing import List, Tuple, Dict, Any
+
+
+def get_overlap(min1, max1, min2, max2):
+    """Calculate overlap amount between two ranges"""
+    return max(0, min(max1, max2) - max(min1, min2))
+
+
+def should_merge(box1, box2, v_tol=30, h_tol=50, w_ratio=0.3):
+    """
+    Determine if two boxes should be merged based on horizontal OR vertical proximity.
+    
+    This function implements two types of merging:
+    1. Horizontal Merging (Words → Lines): Merges boxes that are side-by-side
+    2. Vertical Merging (Lines → Paragraphs): Merges boxes that are stacked
+    
+    Args:
+        box1, box2: (x1, y1, x2, y2) tuples
+        v_tol: Vertical tolerance (gap between lines)
+        h_tol: Horizontal tolerance (gap between words)
+        w_ratio: Width ratio threshold (used for vertical merging validation)
+    """
+    x1_1, y1_1, x2_1, y2_1 = box1
+    x1_2, y1_2, x2_2, y2_2 = box2
+    
+    # Dimensions
+    w1, h1 = x2_1 - x1_1, y2_1 - y1_1
+    w2, h2 = x2_2 - x1_2, y2_2 - y1_2
+    min_h = min(h1, h2)
+    min_w = min(w1, w2)
+    
+    # --- 1. Horizontal Merge (Words on same line) ---
+    # Condition: High vertical overlap (they are on the same "row")
+    y_overlap = get_overlap(y1_1, y2_1, y1_2, y2_2)
+    is_same_row = y_overlap > (min_h * 0.4)  # Overlap at least 40% of height
+    
+    if is_same_row:
+        # Check horizontal gap (distance between right of A and left of B)
+        # We allow negative gap (overlap) or positive gap (space)
+        gap = max(x1_1, x1_2) - min(x2_1, x2_2)
+        
+        # Merge if gap is small enough (roughly 1-2 character widths)
+        # Note: h_tol here acts as "max space width"
+        if gap < h_tol:
+            return True
+
+    # --- 2. Vertical Merge (Lines in a paragraph) ---
+    # Condition: High horizontal overlap OR visually aligned (center/left)
+    x_overlap = get_overlap(x1_1, x2_1, x1_2, x2_2)
+    
+    # Check if vertically adjacent (one bottom close to other top)
+    v_gap = max(y1_1, y1_2) - min(y2_1, y2_2)
+    
+    if v_gap < v_tol:
+        # Strict alignment check:
+        # Either significant horizontal overlap (stacked text)
+        if x_overlap > (min_w * 0.2):
+            return True
+            
+        # OR Left-aligned (roughly)
+        if abs(x1_1 - x1_2) < 20: 
+            return True
+            
+        # OR Center-aligned (roughly)
+        center1 = (x1_1 + x2_1) / 2
+        center2 = (x1_2 + x2_2) / 2
+        if abs(center1 - center2) < 20:
+            return True
+            
+    return False
 
 
 def merge_close_text_boxes(text_regions, vertical_tolerance=30, horizontal_tolerance=50, width_ratio_threshold=0.3):
     """
-    Merge text boxes that are close together vertically (like split lines of dialogue).
-    Based on comic-translate's _are_text_blocks_mergeable logic.
+    Merge text boxes that are close together (both horizontally and vertically).
+    
+    This function handles two types of merging:
+    1. Horizontal Merging: Merges words that are side-by-side into lines
+    2. Vertical Merging: Merges lines that are stacked into paragraphs
     
     Args:
         text_regions: List of (x1, y1, x2, y2) bounding boxes
-        vertical_tolerance: Maximum vertical gap between boxes to merge (pixels)
-        horizontal_tolerance: Maximum horizontal offset to consider boxes aligned (pixels)
-        width_ratio_threshold: Minimum ratio of smaller width to larger width (0.0-1.0) to consider boxes similar
+        vertical_tolerance: Max gap between lines (pixels)
+        horizontal_tolerance: Max gap between words (pixels)
+        width_ratio_threshold: (Legacy/Optional) Kept for API compatibility
     
     Returns:
         Tuple of (merged_boxes, is_merged_list, original_groups) where:
@@ -21,90 +93,59 @@ def merge_close_text_boxes(text_regions, vertical_tolerance=30, horizontal_toler
                           into the corresponding merged box (empty list for non-merged boxes)
     """
     if not text_regions or len(text_regions) <= 1:
-        return text_regions, [False] * len(text_regions) if text_regions else [], [[]] * len(text_regions) if text_regions else []
+        return text_regions, [False] * len(text_regions) if text_regions else [], [[list(r)] for r in text_regions] if text_regions else []
     
     # Convert to list of lists for easier manipulation
+    # Store as simple list of coordinates
     boxes = [list(bbox) for bbox in text_regions]
+    
+    # Adjacency matrix or graph-based merging is cleaner, 
+    # but iterative clustering is robust for this use case.
     merged = []
     is_merged = []
     original_groups = []
+    
     used = [False] * len(boxes)
     
     for i, box1 in enumerate(boxes):
         if used[i]:
             continue
         
-        # Start a group with this box (store as tuple for immutability)
+        # Start a group with this box
         group = [tuple(box1)]
         used[i] = True
         
-        # Try to find boxes that can be merged with this one
+        # Iteratively try to add boxes to this group
+        # (This handles A->B->C chaining)
         changed = True
         while changed:
             changed = False
             for j, box2 in enumerate(boxes):
-                if used[j] or j == i:
+                if used[j]:
                     continue
                 
-                # Check if box2 can be merged with any box in the group
+                # Check if box2 can be merged with ANY box currently in the group
                 can_merge = False
                 for group_box in group:
-                    x1_1, y1_1, x2_1, y2_1 = group_box
-                    x1_2, y1_2, x2_2, y2_2 = box2
-                    
-                    # Calculate dimensions
-                    w1 = x2_1 - x1_1
-                    h1 = y2_1 - y1_1
-                    w2 = x2_2 - x1_2
-                    h2 = y2_2 - y1_2
-                    
-                    # Check vertical adjacency (one box's bottom is close to another's top)
-                    vertical_gap1 = abs(y2_1 - y1_2)  # box1 bottom to box2 top
-                    vertical_gap2 = abs(y2_2 - y1_1)  # box2 bottom to box1 top
-                    is_vertically_adjacent = (vertical_gap1 < vertical_tolerance or 
-                                            vertical_gap2 < vertical_tolerance)
-                    
-                    if not is_vertically_adjacent:
-                        continue
-                    
-                    # Check horizontal alignment (similar x positions)
-                    # Use a more lenient check - allow some horizontal offset
-                    x_alignment = abs(x1_1 - x1_2)
-                    if x_alignment > horizontal_tolerance:
-                        continue
-                    
-                    # Check width similarity using ratio instead of absolute difference
-                    # This is more lenient for dialogue boxes where lines can be different lengths
-                    if w1 > 0 and w2 > 0:
-                        width_ratio = min(w1, w2) / max(w1, w2)
-                        if width_ratio < width_ratio_threshold:
-                            continue
-                    
-                    # All checks passed, can merge
-                    can_merge = True
-                    break
+                    if should_merge(group_box, box2, vertical_tolerance, horizontal_tolerance, width_ratio_threshold):
+                        can_merge = True
+                        break
                 
                 if can_merge:
                     group.append(tuple(box2))
                     used[j] = True
                     changed = True
         
-        # Merge all boxes in the group into one bounding box
-        if len(group) > 1:
-            # Calculate the union bounding box
-            min_x = min(box[0] for box in group)
-            min_y = min(box[1] for box in group)
-            max_x = max(box[2] for box in group)
-            max_y = max(box[3] for box in group)
+        # Finalize the group into a single bounding box
+        if len(group) > 0:
+            min_x = min(b[0] for b in group)
+            min_y = min(b[1] for b in group)
+            max_x = max(b[2] for b in group)
+            max_y = max(b[3] for b in group)
+            
             merged.append((min_x, min_y, max_x, max_y))
-            is_merged.append(True)  # This is a merged box
-            original_groups.append(list(group))  # Store original boxes
-        else:
-            # Single box, keep as is
-            merged.append(group[0])
-            is_merged.append(False)  # This is an original box
-            original_groups.append([])  # No original boxes (it's the original itself)
-    
+            # True if multiple boxes were combined
+            is_merged.append(len(group) > 1)
+            original_groups.append(group)
+            
     return merged, is_merged, original_groups
-
-
