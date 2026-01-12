@@ -51,15 +51,31 @@ export function populateConfigInputs(config: Config): void {
     const minConfInput = document.getElementById('min_confidence') as HTMLInputElement;
     const minWidthInput = document.getElementById('min_width') as HTMLInputElement;
     const minHeightInput = document.getElementById('min_height') as HTMLInputElement;
+    const minWidthTextInput = document.getElementById('min_width_input') as HTMLInputElement;
+    const minHeightTextInput = document.getElementById('min_height_input') as HTMLInputElement;
     const vTolInput = document.getElementById('v_tol') as HTMLInputElement;
     const hTolInput = document.getElementById('h_tol') as HTMLInputElement;
+    const vTolTextInput = document.getElementById('v_tol_input') as HTMLInputElement;
+    const hTolTextInput = document.getElementById('h_tol_input') as HTMLInputElement;
     const wRatioInput = document.getElementById('w_ratio') as HTMLInputElement;
     
     if (minConfInput) minConfInput.value = String(td.min_confidence || 0.6);
-    if (minWidthInput) minWidthInput.value = String(td.min_width || 30);
-    if (minHeightInput) minHeightInput.value = String(td.min_height || 30);
-    if (vTolInput) vTolInput.value = String(td.merge_vertical_tolerance || 30);
-    if (hTolInput) hTolInput.value = String(td.merge_horizontal_tolerance || 50);
+    if (minWidthInput) {
+        minWidthInput.value = String(td.min_width || 30);
+        if (minWidthTextInput) minWidthTextInput.value = String(td.min_width || 30);
+    }
+    if (minHeightInput) {
+        minHeightInput.value = String(td.min_height || 30);
+        if (minHeightTextInput) minHeightTextInput.value = String(td.min_height || 30);
+    }
+    if (vTolInput) {
+        vTolInput.value = String(td.merge_vertical_tolerance || 30);
+        if (vTolTextInput) vTolTextInput.value = String(td.merge_vertical_tolerance || 30);
+    }
+    if (hTolInput) {
+        hTolInput.value = String(td.merge_horizontal_tolerance || 50);
+        if (hTolTextInput) hTolTextInput.value = String(td.merge_horizontal_tolerance || 50);
+    }
     if (wRatioInput) wRatioInput.value = String(td.merge_width_ratio_threshold || 0.3);
 }
 
@@ -68,8 +84,13 @@ export function getConfigFromInputs(): Config {
     const apiKeyInput = document.getElementById('api_key') as HTMLInputElement;
     const modelInput = document.getElementById('model') as HTMLInputElement;
     const minConfInput = document.getElementById('min_confidence') as HTMLInputElement;
+    // Prefer text inputs if they exist, fall back to sliders
+    const minWidthTextInput = document.getElementById('min_width_input') as HTMLInputElement;
+    const minHeightTextInput = document.getElementById('min_height_input') as HTMLInputElement;
     const minWidthInput = document.getElementById('min_width') as HTMLInputElement;
     const minHeightInput = document.getElementById('min_height') as HTMLInputElement;
+    const vTolTextInput = document.getElementById('v_tol_input') as HTMLInputElement;
+    const hTolTextInput = document.getElementById('h_tol_input') as HTMLInputElement;
     const vTolInput = document.getElementById('v_tol') as HTMLInputElement;
     const hTolInput = document.getElementById('h_tol') as HTMLInputElement;
     const wRatioInput = document.getElementById('w_ratio') as HTMLInputElement;
@@ -81,10 +102,10 @@ export function getConfigFromInputs(): Config {
         max_image_dimension: 1080,
         text_detection: {
             min_confidence: parseFloat(minConfInput?.value || '0.6'),
-            min_width: parseInt(minWidthInput?.value || '30'),
-            min_height: parseInt(minHeightInput?.value || '30'),
-            merge_vertical_tolerance: parseInt(vTolInput?.value || '30'),
-            merge_horizontal_tolerance: parseInt(hTolInput?.value || '50'),
+            min_width: parseInt(minWidthTextInput?.value || minWidthInput?.value || '30'),
+            min_height: parseInt(minHeightTextInput?.value || minHeightInput?.value || '30'),
+            merge_vertical_tolerance: parseInt(vTolTextInput?.value || vTolInput?.value || '30'),
+            merge_horizontal_tolerance: parseInt(hTolTextInput?.value || hTolInput?.value || '50'),
             merge_width_ratio_threshold: parseFloat(wRatioInput?.value || '0.3')
         }
     };

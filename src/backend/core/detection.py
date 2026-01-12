@@ -133,15 +133,17 @@ def detect_text_regions(image, min_confidence=0.6, min_width=30, min_height=30):
 def detect_text_regions_unfiltered(image, min_confidence=0.6):
     """
     Detect text regions in the image using PaddleOCR, but return ALL detections
-    after confidence filtering (before size filtering).
-    This allows the frontend to do size filtering live.
+    with their confidence scores (before any filtering).
+    This allows the backend to cache raw detections and apply filters later.
     
     Args:
         image: PIL Image to process
         min_confidence: Minimum confidence score (0.0-1.0) to keep a detection.
+                      Note: This is applied during detection, but we return all detections
+                      with scores so confidence filtering can be reapplied later.
     
     Returns:
-        List of bounding boxes as (x1, y1, x2, y2) tuples (after confidence filtering only)
+        List of tuples: ((x1, y1, x2, y2), confidence_score) for all valid detections
     """
     if not PADDLEOCR_AVAILABLE or TextDetection is None or cv2 is None:
         return None
@@ -210,18 +212,15 @@ def detect_text_regions_unfiltered(image, min_confidence=0.6):
                                         score = float(dt_scores[idx]) if idx < len(dt_scores) else 1.0
                                         confidence_scores.append(score)
         
-        # Filter by confidence score only (no size filtering)
-        filtered_regions = []
-        for region, score in zip(text_regions, confidence_scores):
-            if score >= min_confidence:
-                filtered_regions.append(region)
+        # Return all detections with their scores (no filtering applied yet)
+        # This allows the backend to cache and reapply filters later
+        detections_with_scores = list(zip(text_regions, confidence_scores))
         
-        if len(text_regions) > len(filtered_regions):
-            print(f"Filtered out {len(text_regions) - len(filtered_regions)} low-confidence detections (confidence < {min_confidence})")
+        if detections_with_scores:
+            print(f"Detected {len(detections_with_scores)} text regions (with confidence scores)")
         
-        # Return regions after confidence filtering only (no size filtering, no sorting)
-        # The frontend will handle size filtering and sorting for live updates
-        return filtered_regions
+        # Return as list of ((x1, y1, x2, y2), score) tuples
+        return detections_with_scores
     except Exception as e:
         print(f"Error detecting text regions: {e}")
         import traceback

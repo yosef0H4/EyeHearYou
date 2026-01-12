@@ -1,6 +1,5 @@
 /** UI rendering and interaction */
 import { BoundingBoxTuple, MergedBox, ScreenshotResponse } from './types.js';
-import { mergeCloseTextBoxes } from './merge.js';
 
 export class ImageViewer {
     private imageNaturalWidth: number = 0;
@@ -9,8 +8,8 @@ export class ImageViewer {
     private imageDisplayHeight: number = 0;
     private scaleX: number = 1;
     private scaleY: number = 1;
-    private unfilteredDetections: BoundingBoxTuple[] = [];  // All detections from server
-    private rawDetections: BoundingBoxTuple[] = [];  // Filtered by min_width/min_height
+    private filteredBoxes: BoundingBoxTuple[] = [];  // Filtered boxes from backend
+    private mergedBoxes: MergedBox[] = [];  // Merged boxes from backend
 
     constructor() {
         this.setupResizeHandler();
@@ -22,9 +21,8 @@ export class ImageViewer {
             clearTimeout(resizeTimeout);
             resizeTimeout = window.setTimeout(() => {
                 this.updateScales();
-                if (this.rawDetections.length > 0) {
-                    this.drawRawBoxes();
-                    this.runLiveMerge();
+                if (this.filteredBoxes.length > 0 || this.mergedBoxes.length > 0) {
+                    this.drawAllBoxes();
                 }
             }, 250);
         });
@@ -69,11 +67,6 @@ export class ImageViewer {
                         this.updateOverlaySizes();
                         this.clearBoxes();
                         
-                        // Re-apply size filter if we have unfiltered detections
-                        if (this.unfilteredDetections.length > 0) {
-                            this.applySizeFilter();
-                        }
-                        
                         const outputText = document.getElementById('output-text') as HTMLElement;
                         if (outputText) {
                             outputText.innerText = `✅ Screenshot updated (version ${data.version || 0}). Ready to detect text regions.`;
@@ -105,81 +98,31 @@ export class ImageViewer {
         }
     }
 
-    setRawDetections(detections: BoundingBoxTuple[]): void {
-        // Store unfiltered detections for live size filtering
-        this.unfilteredDetections = detections;
-        this.applySizeFilter();
+    /**
+     * Set detection results from backend (backend-authoritative)
+     * Backend has already computed filtering and merging
+     */
+    setDetectionResults(filtered: BoundingBoxTuple[], merged: MergedBox[]): void {
+        this.filteredBoxes = filtered;
+        this.mergedBoxes = merged;
+        this.drawAllBoxes();
     }
 
     /**
-     * Filter detections by min_width and min_height (ported from Python filter_text_regions)
+     * Draw all boxes (filtered boxes in red, merged boxes in blue, tolerance zones in yellow)
      */
-    private applySizeFilter(): void {
-        const minWidthInput = document.getElementById('min_width') as HTMLInputElement;
-        const minHeightInput = document.getElementById('min_height') as HTMLInputElement;
-        
-        const min_width = parseInt(minWidthInput?.value || '30');
-        const min_height = parseInt(minHeightInput?.value || '30');
-        
-        if (!this.unfilteredDetections || this.unfilteredDetections.length === 0) {
-            this.rawDetections = [];
-            this.drawRawBoxes();
-            this.runLiveMerge();
-            return;
-        }
-        
-        // Need image dimensions for clamping - if not available yet, skip filtering
-        if (this.imageNaturalWidth === 0 || this.imageNaturalHeight === 0) {
-            // Image not loaded yet, store unfiltered and wait
-            this.rawDetections = this.unfilteredDetections;
-            return;
-        }
-        
-        const filtered: BoundingBoxTuple[] = [];
-        
-        for (const [x1, y1, x2, y2] of this.unfilteredDetections) {
-            // Clamp coordinates to image bounds
-            const clamped_x1 = Math.max(0, Math.min(x1, this.imageNaturalWidth));
-            const clamped_x2 = Math.max(0, Math.min(x2, this.imageNaturalWidth));
-            const clamped_y1 = Math.max(0, Math.min(y1, this.imageNaturalHeight));
-            const clamped_y2 = Math.max(0, Math.min(y2, this.imageNaturalHeight));
-            
-            // Calculate dimensions
-            const w = clamped_x2 - clamped_x1;
-            const h = clamped_y2 - clamped_y1;
-            
-            // Filter out invalid or too small regions
-            if (w <= 0 || h <= 0) {
-                continue;
-            }
-            
-            // Filter by minimum size (width and height)
-            if (w <= min_width || h <= min_height) {
-                continue;
-            }
-            
-            filtered.push([clamped_x1, clamped_y1, clamped_x2, clamped_y2]);
-        }
-        
-        this.rawDetections = filtered;
-        this.drawRawBoxes();
-        this.runLiveMerge();
+    private drawAllBoxes(): void {
+        this.drawFilteredBoxes();
+        this.drawMergedBoxes();
     }
 
-    /**
-     * Call this when min_width or min_height sliders change for live updates
-     */
-    updateSizeFilter(): void {
-        this.applySizeFilter();
-    }
-
-    private drawRawBoxes(): void {
+    private drawFilteredBoxes(): void {
         const container = document.getElementById('overlay-raw');
         if (!container) return;
         
         container.innerHTML = '';
         
-        this.rawDetections.forEach((rect) => {
+        this.filteredBoxes.forEach((rect) => {
             const [x1, y1, x2, y2] = rect;
             const div = document.createElement('div');
             div.className = 'box box-raw';
@@ -191,34 +134,21 @@ export class ImageViewer {
         });
     }
 
-    runLiveMerge(): void {
-        if (!this.rawDetections || this.rawDetections.length === 0) return;
-
-        const vTolInput = document.getElementById('v_tol') as HTMLInputElement;
-        const hTolInput = document.getElementById('h_tol') as HTMLInputElement;
-        const wRatioInput = document.getElementById('w_ratio') as HTMLInputElement;
-
-        const v_tol = parseInt(vTolInput?.value || '30');
-        const h_tol = parseInt(hTolInput?.value || '50');
-        const ratio_thresh = parseFloat(wRatioInput?.value || '0.3');
-
-        const merged = mergeCloseTextBoxes(this.rawDetections, v_tol, h_tol, ratio_thresh);
-        this.drawMergedBoxes(merged);
-    }
-
-    private drawMergedBoxes(mergedList: MergedBox[]): void {
+    private drawMergedBoxes(): void {
         const containerMerged = document.getElementById('overlay-merged');
         const containerTolerance = document.getElementById('overlay-tolerance');
         
         if (containerMerged) containerMerged.innerHTML = '';
         if (containerTolerance) containerTolerance.innerHTML = '';
 
+        const vTolTextInput = document.getElementById('v_tol_input') as HTMLInputElement;
+        const hTolTextInput = document.getElementById('h_tol_input') as HTMLInputElement;
         const vTolInput = document.getElementById('v_tol') as HTMLInputElement;
         const hTolInput = document.getElementById('h_tol') as HTMLInputElement;
-        const v_tol = parseInt(vTolInput?.value || '30');
-        const h_tol = parseInt(hTolInput?.value || '50');
+        const v_tol = parseInt(vTolTextInput?.value || vTolInput?.value || '30');
+        const h_tol = parseInt(hTolTextInput?.value || hTolInput?.value || '50');
 
-        mergedList.forEach((item) => {
+        this.mergedBoxes.forEach((item) => {
             const [x1, y1, x2, y2] = item.rect;
             
             // Draw merged box (blue)
@@ -241,7 +171,7 @@ export class ImageViewer {
             }
 
             // Draw tolerance zones (yellow) for merged boxes with multiple original boxes
-            if (item.count > 1 && item.originalBoxes && containerTolerance) {
+            if (item.count > 1 && item.originalBoxes && item.originalBoxes.length > 0 && containerTolerance) {
                 item.originalBoxes.forEach((origBox) => {
                     const [ox1, oy1, ox2, oy2] = origBox;
                     const tolDiv = document.createElement('div');
@@ -257,8 +187,8 @@ export class ImageViewer {
     }
 
     private clearBoxes(): void {
-        this.rawDetections = [];
-        this.unfilteredDetections = [];
+        this.filteredBoxes = [];
+        this.mergedBoxes = [];
         const overlayRaw = document.getElementById('overlay-raw');
         const overlayTolerance = document.getElementById('overlay-tolerance');
         const overlayMerged = document.getElementById('overlay-merged');
@@ -271,8 +201,12 @@ export class ImageViewer {
 
 export function updatePaddleViz(): void {
     const conf = parseFloat((document.getElementById('min_confidence') as HTMLInputElement)?.value || '0.6');
-    const w = parseInt((document.getElementById('min_width') as HTMLInputElement)?.value || '30');
-    const h = parseInt((document.getElementById('min_height') as HTMLInputElement)?.value || '30');
+    const minWidthTextInput = document.getElementById('min_width_input') as HTMLInputElement;
+    const minHeightTextInput = document.getElementById('min_height_input') as HTMLInputElement;
+    const minWidthInput = document.getElementById('min_width') as HTMLInputElement;
+    const minHeightInput = document.getElementById('min_height') as HTMLInputElement;
+    const w = parseInt(minWidthTextInput?.value || minWidthInput?.value || '30');
+    const h = parseInt(minHeightTextInput?.value || minHeightInput?.value || '30');
 
     const valConf = document.getElementById('val_conf');
     const valWidth = document.getElementById('val_width');
@@ -291,8 +225,12 @@ export function updatePaddleViz(): void {
 }
 
 export function updateMergeViz(): void {
-    const v = parseInt((document.getElementById('v_tol') as HTMLInputElement)?.value || '30');
-    const h = parseInt((document.getElementById('h_tol') as HTMLInputElement)?.value || '50');
+    const vTolTextInput = document.getElementById('v_tol_input') as HTMLInputElement;
+    const hTolTextInput = document.getElementById('h_tol_input') as HTMLInputElement;
+    const vTolInput = document.getElementById('v_tol') as HTMLInputElement;
+    const hTolInput = document.getElementById('h_tol') as HTMLInputElement;
+    const v = parseInt(vTolTextInput?.value || vTolInput?.value || '30');
+    const h = parseInt(hTolTextInput?.value || hTolInput?.value || '50');
     const r = parseFloat((document.getElementById('w_ratio') as HTMLInputElement)?.value || '0.3');
 
     const valVTol = document.getElementById('val_vtol');

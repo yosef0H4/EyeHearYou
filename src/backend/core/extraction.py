@@ -126,7 +126,7 @@ def extract_text_from_regions(full_image, config):
     merge_vertical_tolerance = text_detection_config.get("merge_vertical_tolerance", 30)
     merge_horizontal_tolerance = text_detection_config.get("merge_horizontal_tolerance", 50)
     merge_width_ratio_threshold = text_detection_config.get("merge_width_ratio_threshold", 0.3)
-    text_regions, is_merged = merge_close_text_boxes(
+    text_regions, is_merged, _ = merge_close_text_boxes(
         text_regions,
         vertical_tolerance=merge_vertical_tolerance,
         horizontal_tolerance=merge_horizontal_tolerance,

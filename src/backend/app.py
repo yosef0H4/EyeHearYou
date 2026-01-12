@@ -59,4 +59,5 @@ app.get("/screenshot/events")(screenshot.screenshot_events)
 app.post("/detect_preview")(detection.detect_preview)
 
 app.post("/run_extraction")(extraction.run_extraction)
+app.get("/last_extraction")(extraction.get_last_extraction)
 

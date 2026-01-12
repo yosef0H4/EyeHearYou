@@ -1,4 +1,7 @@
 """Text box merging functionality"""
+from typing import List, Tuple
+
+
 def merge_close_text_boxes(text_regions, vertical_tolerance=30, horizontal_tolerance=50, width_ratio_threshold=0.3):
     """
     Merge text boxes that are close together vertically (like split lines of dialogue).
@@ -11,25 +14,28 @@ def merge_close_text_boxes(text_regions, vertical_tolerance=30, horizontal_toler
         width_ratio_threshold: Minimum ratio of smaller width to larger width (0.0-1.0) to consider boxes similar
     
     Returns:
-        Tuple of (merged_boxes, is_merged_list) where:
+        Tuple of (merged_boxes, is_merged_list, original_groups) where:
         - merged_boxes: List of merged bounding boxes as (x1, y1, x2, y2) tuples
         - is_merged_list: List of booleans indicating if each box is a merged box (True) or original (False)
+        - original_groups: List of lists, where each inner list contains the original boxes that were merged
+                          into the corresponding merged box (empty list for non-merged boxes)
     """
     if not text_regions or len(text_regions) <= 1:
-        return text_regions, [False] * len(text_regions) if text_regions else []
+        return text_regions, [False] * len(text_regions) if text_regions else [], [[]] * len(text_regions) if text_regions else []
     
     # Convert to list of lists for easier manipulation
     boxes = [list(bbox) for bbox in text_regions]
     merged = []
     is_merged = []
+    original_groups = []
     used = [False] * len(boxes)
     
     for i, box1 in enumerate(boxes):
         if used[i]:
             continue
         
-        # Start a group with this box
-        group = [box1]
+        # Start a group with this box (store as tuple for immutability)
+        group = [tuple(box1)]
         used[i] = True
         
         # Try to find boxes that can be merged with this one
@@ -79,7 +85,7 @@ def merge_close_text_boxes(text_regions, vertical_tolerance=30, horizontal_toler
                     break
                 
                 if can_merge:
-                    group.append(box2)
+                    group.append(tuple(box2))
                     used[j] = True
                     changed = True
         
@@ -92,11 +98,13 @@ def merge_close_text_boxes(text_regions, vertical_tolerance=30, horizontal_toler
             max_y = max(box[3] for box in group)
             merged.append((min_x, min_y, max_x, max_y))
             is_merged.append(True)  # This is a merged box
+            original_groups.append(list(group))  # Store original boxes
         else:
             # Single box, keep as is
-            merged.append(tuple(group[0]))
+            merged.append(group[0])
             is_merged.append(False)  # This is an original box
+            original_groups.append([])  # No original boxes (it's the original itself)
     
-    return merged, is_merged
+    return merged, is_merged, original_groups
 
 

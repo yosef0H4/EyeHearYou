@@ -35,10 +35,19 @@ export interface ScreenshotResponse {
     message?: string;
 }
 
+export interface RawDetectionBox {
+    bbox: BoundingBoxTuple;
+    score: number;
+}
+
 export interface DetectionResponse {
     status: "success" | "error";
-    regions?: BoundingBoxTuple[];
+    raw?: RawDetectionBox[];
+    filtered?: BoundingBoxTuple[];
+    merged?: MergedBox[];
     message?: string;
+    // Legacy support
+    regions?: BoundingBoxTuple[];
 }
 
 export interface ExtractionResponse {
