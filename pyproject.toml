@@ -7,11 +7,12 @@ dependencies = [
     "gitignore-parser>=0.1.0",
     "keyboard>=0.13.5",
     "numpy>=1.24.0",
-    "opencv-python>=4.8.0",
+    "opencv-python>=4.8.0",  # cv2
     "pillow>=12.1.0",
     "rapidocr-onnxruntime",
     "pygetwindow>=0.0.9",
     "pyperclip>=1.8.2",
+    "pywin32>=306; sys_platform == 'win32'",  # win32clipboard for Windows clipboard fallback
     "pyqt6",
     "streamlit>=1.52.2",
     # H2OVL-Mississippi dependencies (non-torch dependencies only)
@@ -21,6 +22,11 @@ dependencies = [
     "einops>=0.7.0",
     "sentencepiece>=0.1.99",
     "huggingface-hub[hf-xet]>=0.36.0",
+    "pip>=25.3",
+    # Kokoro TTS dependencies (non-torch dependencies)
+    # NOTE: kokoro, soundfile, sounddevice, loguru, misaki[en], and en-core-web-sm are NOT included here
+    # because misaki[en] requires torch, which would be installed as CPU version.
+    # Install them separately via install.py or manually after installing PyTorch.
 ]
 
 # Note: RapidOCR is used for text detection instead of PaddleOCR to avoid

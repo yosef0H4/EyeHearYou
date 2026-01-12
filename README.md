@@ -1,10 +1,11 @@
 # Visual Novel OCR Tool
 
-A lightweight Python application for extracting text from visual novels and games. Press `Ctrl+Shift+Alt+Z` anywhere to capture the active window, automatically detect text regions, extract text using AI, and copy it to your clipboard. Perfect for reading visual novels in foreign languages or extracting dialogue from games.
+A lightweight Python application for extracting text from visual novels and games. Press `Ctrl+Shift+Alt+Z` anywhere to capture the active window, automatically detect text regions, extract text using AI, copy it to your clipboard, and read it aloud using Kokoro TTS. Perfect for reading visual novels in foreign languages or extracting dialogue from games.
 
 ## Features
 
-- **One-Key Extraction**: Press `Ctrl+Shift+Alt+Z` to automatically capture, detect, extract, and copy text to clipboard
+- **One-Key Extraction**: Press `Ctrl+Shift+Alt+Z` to automatically capture, detect, extract, copy to clipboard, and read text aloud
+- **Text-to-Speech**: Automatically reads extracted text using Kokoro TTS (82M parameter, Apache-licensed model)
 - **Desktop GUI**: Visual interface to fine-tune detection and merge settings with live preview
 - **Backend-Authoritative**: All detection/merging logic runs in Python for consistency between preview and extraction
 - **Smart Text Detection**: Uses RapidOCR to detect text regions, then processes only cropped regions with the local H2OVL model (faster and more accurate)
@@ -21,38 +22,46 @@ A lightweight Python application for extracting text from visual novels and game
 
 ## Installation
 
-1. Install `uv` if you haven't already:
+1. **Install `uv`** if you haven't already:
    ```bash
    curl -LsSf https://astral.sh/uv/install.sh | sh
    ```
+   (Windows: `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`)
 
-2. Install base dependencies:
+2. **Install all dependencies** using the installation script:
+   
+   The installation script automatically detects your system and installs the appropriate dependencies:
    ```bash
-   uv sync
-   ```
-
-3. **Install RapidOCR (for text detection)**:
-   ```bash
-   uv pip install rapidocr-onnxruntime
+   uv run python install.py
    ```
    
-   **Note**: RapidOCR runs on CPU via ONNX Runtime and doesn't require GPU or CUDA. It's lightweight and doesn't conflict with PyTorch dependencies. RapidOCR is required for text detection - the app will not run without it.
-
-4. **Optional: Install GPU support for H2OVL-Mississippi OCR model**:
-   
-   For faster OCR performance, install GPU support:
+   Or specify GPU or CPU explicitly:
    ```bash
-   install-gpu.bat
+   uv run python install.py --gpu    # Force GPU installation
+   uv run python install.py --cpu    # Force CPU-only installation
    ```
    
-   This installs:
-   - PyTorch 2.7.0 with CUDA 12.8
-   - Flash Attention 2.7.4 (Windows prebuilt wheel)
+   **What gets installed:**
+   - Base dependencies from `pyproject.toml` (including opencv-python for RapidOCR)
+   - PyTorch (GPU with CUDA 12.8, or CPU version)
+   - Flash Attention 2.7.4 (GPU only, Windows prebuilt wheel via Hugging Face Hub)
    - H2OVL-Mississippi dependencies (transformers, accelerate, timm, peft)
+   - Kokoro TTS dependencies (kokoro, misaki[en], loguru, soundfile, sounddevice)
+   - Spacy model (en-core-web-sm) for Kokoro TTS
+   - RapidOCR (CPU via ONNX Runtime, for text detection)
    
-   **Requirements**: NVIDIA GPU with CUDA 12.8 support
+   **Requirements for GPU installation**: NVIDIA GPU with CUDA 12.8 support
    
-   **Note**: The GPU installation is optional but recommended. The model runs on CPU by default but is significantly faster with a GPU.
+   **Note**: The GPU installation is optional but recommended. The model runs on CPU by default but is significantly faster with a GPU. TTS works on both CPU and GPU.
+   
+   **Important**: The install script handles a known compatibility issue between PyTorch 2.7.0 and torchvision 0.22.0 automatically via a runtime patch. This is required for Flash Attention compatibility.
+   
+   **Features of the install script:**
+   - Auto-detects GPU availability (or use `--gpu`/`--cpu` flags)
+   - Uses Hugging Face Hub with XET support for efficient Flash Attention downloads
+   - Real-time progress output for all installation steps
+   - Automatic verification of all installed components
+   - Handles dependency conflicts automatically
 
 ## Configuration
 
@@ -74,6 +83,11 @@ The application creates a `config.json` file automatically. You can edit this fi
         "merge_vertical_tolerance": 4,
         "merge_horizontal_tolerance": 50,
         "merge_width_ratio_threshold": 0.3
+    },
+    "tts": {
+        "enabled": true,
+        "voice": "af_heart",
+        "speed": 1.0
     }
 }
 ```
@@ -82,6 +96,10 @@ The application creates a `config.json` file automatically. You can edit this fi
 - **max_image_dimension**: Downscales large images to fit model context (default: 1080)
 - **preprocessing**: Image adjustments before detection (useful for difficult backgrounds)
 - **text_detection**: Controls how text is detected and merged into lines
+- **tts**: Text-to-Speech settings
+  - **enabled**: Enable/disable TTS (default: true)
+  - **voice**: Kokoro voice ID (default: "af_heart")
+  - **speed**: Speech speed multiplier (default: 1.0, range: 0.5-2.0)
 
 ## Quick Start
 
@@ -99,6 +117,7 @@ uv run python run_gui.py
 - Merged into complete dialogue lines
 - Extracted using AI
 - **Copied to your clipboard**
+- **Read aloud using Kokoro TTS** (if enabled in config)
 
 The UI automatically updates to show detection boxes and extracted text. You only need to use the UI buttons if you want to tune settings for better detection.
 
@@ -134,10 +153,11 @@ uv run python run_gui.py
 - Hotkey support: Press `Ctrl+Shift+Alt+Z` anywhere
 
 **Workflow:**
-1. **Quick Start**: Just press `Ctrl+Shift+Alt+Z` while playing a visual novel - text is automatically extracted and copied to clipboard!
-2. **Tune Settings** (optional): Use the UI to adjust detection sensitivity and merge tolerances
+1. **Quick Start**: Just press `Ctrl+Shift+Alt+Z` while playing a visual novel - text is automatically extracted, copied to clipboard, and read aloud!
+2. **Tune Settings** (optional): Use the UI to adjust detection sensitivity, merge tolerances, and TTS settings
    - Red boxes show detected text regions
    - Blue boxes show merged dialogue lines
+   - TTS panel: Enable/disable text-to-speech and adjust speed
    - Adjust sliders to fine-tune for your game/visual novel
 3. **Manual Mode** (optional): Click "New Screenshot" and "Run Detection" if you want to manually test settings
 4. The UI automatically shows results from hotkey captures - no need to press buttons unless re-tuning settings
@@ -175,8 +195,15 @@ This runs the same hotkey functionality but prints results to console instead of
 - Make sure no other application is using the same hotkey
 
 ### Model loading is slow
-- The first run downloads the model (~1.6GB) and may take time
+- The first run downloads the H2OVL model (~1.6GB) and Kokoro TTS model (~300MB) and may take time
 - CPU inference is slower than GPU; consider installing CUDA support if you have an NVIDIA card
+- TTS model loads on first use - subsequent uses are faster
+
+### TTS not working
+- Make sure TTS is enabled in config.json: `"tts": {"enabled": true}`
+- Check console for TTS messages - first load may take a minute
+- Verify Kokoro is installed: `uv pip list | grep kokoro`
+- If you see torchvision errors, the runtime patch should handle it automatically
 
 ### Import errors
 - Make sure you're using the virtual environment: `uv run python run_gui.py` or `uv run python run_cli.py`

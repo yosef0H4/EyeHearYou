@@ -5,11 +5,13 @@ Tests the TTS model to verify installation and functionality
 # CRITICAL: Apply torchvision patch BEFORE importing torch or anything that imports torch
 import sys
 from pathlib import Path
-sys.path.insert(0, 'src')
+import importlib.util
 
-# Import and apply patch BEFORE any other imports
-from backend.core.torchvision_patch import apply_torchvision_patch
-apply_torchvision_patch()
+# Import patch module directly without triggering __init__.py
+spec = importlib.util.spec_from_file_location("torchvision_patch", "src/backend/core/torchvision_patch.py")
+torchvision_patch = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(torchvision_patch)
+torchvision_patch.apply_torchvision_patch()
 
 import warnings
 # Suppress informational warnings
