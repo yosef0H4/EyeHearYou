@@ -2,14 +2,7 @@
 import numpy as np
 import cv2
 from PIL import Image
-
-# Optional imports for text detection (RapidOCR)
-try:
-    from rapidocr_onnxruntime import RapidOCR
-    RAPIDOCR_AVAILABLE = True
-except ImportError:
-    RAPIDOCR_AVAILABLE = False
-    RapidOCR = None
+from rapidocr_onnxruntime import RapidOCR
 
 from .image_utils import check_gpu_available
 from .filtering import filter_text_regions, sort_text_regions_by_reading_order
@@ -22,7 +15,7 @@ _rapidocr_instance = None
 def _get_rapidocr_instance():
     """Get or create RapidOCR instance (singleton pattern)"""
     global _rapidocr_instance
-    if _rapidocr_instance is None and RAPIDOCR_AVAILABLE:
+    if _rapidocr_instance is None:
         _rapidocr_instance = RapidOCR()
     return _rapidocr_instance
 
@@ -46,61 +39,49 @@ def detect_text_regions(image, min_width=30, min_height=30):
     if task_manager.is_cancelled():
         return None
     
-    if not RAPIDOCR_AVAILABLE:
+    print("Using RapidOCR for text detection (CPU via ONNX Runtime)...")
+    
+    # Get RapidOCR instance
+    ocr = _get_rapidocr_instance()
+    
+    # Convert PIL Image to numpy array
+    img_array = np.array(image)
+    img_height, img_width = img_array.shape[:2]
+    
+    # Run detection only (use_det=True, use_rec=False)
+    # Result format: [[[x1, y1], [x2, y2], [x3, y3], [x4, y4]], ...]
+    result, _ = ocr(img_array, use_det=True, use_rec=False)
+    
+    # Check for cancellation after detection
+    if task_manager.is_cancelled():
         return None
     
-    try:
-        print("Using RapidOCR for text detection (CPU via ONNX Runtime)...")
-        
-        # Get RapidOCR instance
-        ocr = _get_rapidocr_instance()
-        if ocr is None:
-            return None
-        
-        # Convert PIL Image to numpy array
-        img_array = np.array(image)
-        img_height, img_width = img_array.shape[:2]
-        
-        # Run detection only (use_det=True, use_rec=False)
-        # Result format: [[[x1, y1], [x2, y2], [x3, y3], [x4, y4]], ...]
-        result, _ = ocr(img_array, use_det=True, use_rec=False)
-        
-        # Check for cancellation after detection
-        if task_manager.is_cancelled():
-            return None
-        
-        # Extract bounding boxes from RapidOCR output
-        text_regions = []
-        
-        if result and len(result) > 0:
-            for poly in result:
-                if isinstance(poly, list) and len(poly) >= 4:
-                    # Extract coordinates from polygon
-                    # Format: [[x1, y1], [x2, y2], [x3, y3], [x4, y4]]
-                    x_coords = [float(point[0]) for point in poly]
-                    y_coords = [float(point[1]) for point in poly]
-                    x1, x2 = int(min(x_coords)), int(max(x_coords))
-                    y1, y2 = int(min(y_coords)), int(max(y_coords))
-                    
-                    # Only add if region is valid
-                    if x2 > x1 and y2 > y1:
-                        text_regions.append((x1, y1, x2, y2))
-        
-        # Filter out small regions (UI elements, icons, etc.)
-        text_regions = filter_text_regions(text_regions, (img_height, img_width), 
-                                          min_width=min_width, min_height=min_height)
-        
-        # Sort regions by reading order (top-to-bottom, left-to-right for English)
-        # Note: This is a fallback sort, the main sorting happens in worker.py with config
-        text_regions = sort_text_regions_by_reading_order(text_regions, direction='horizontal_ltr')
-        
-        return text_regions
-    except Exception as e:
-        print(f"Error detecting text regions: {e}")
-        print("Falling back to full image processing...")
-        import traceback
-        traceback.print_exc()
-        return None
+    # Extract bounding boxes from RapidOCR output
+    text_regions = []
+    
+    if result and len(result) > 0:
+        for poly in result:
+            if isinstance(poly, list) and len(poly) >= 4:
+                # Extract coordinates from polygon
+                # Format: [[x1, y1], [x2, y2], [x3, y3], [x4, y4]]
+                x_coords = [float(point[0]) for point in poly]
+                y_coords = [float(point[1]) for point in poly]
+                x1, x2 = int(min(x_coords)), int(max(x_coords))
+                y1, y2 = int(min(y_coords)), int(max(y_coords))
+                
+                # Only add if region is valid
+                if x2 > x1 and y2 > y1:
+                    text_regions.append((x1, y1, x2, y2))
+    
+    # Filter out small regions (UI elements, icons, etc.)
+    text_regions = filter_text_regions(text_regions, (img_height, img_width), 
+                                      min_width=min_width, min_height=min_height)
+    
+    # Sort regions by reading order (top-to-bottom, left-to-right for English)
+    # Note: This is a fallback sort, the main sorting happens in worker.py with config
+    text_regions = sort_text_regions_by_reading_order(text_regions, direction='horizontal_ltr')
+    
+    return text_regions
 
 
 def detect_text_regions_unfiltered(image, config=None, use_cache=True):
@@ -124,9 +105,6 @@ def detect_text_regions_unfiltered(image, config=None, use_cache=True):
     if task_manager.is_cancelled():
         return None
     
-    if not RAPIDOCR_AVAILABLE:
-        return None
-    
     # Try to use cache if available
     if use_cache and config:
         from src.backend.state import state
@@ -140,61 +118,53 @@ def detect_text_regions_unfiltered(image, config=None, use_cache=True):
             print(f"Using cached raw detections ({len(cached)} regions)")
             return cached
     
-    try:
-        print("Using RapidOCR for text detection (CPU via ONNX Runtime)...")
-        
-        # Get RapidOCR instance
-        ocr = _get_rapidocr_instance()
-        if ocr is None:
-            return None
-        
-        # Convert PIL Image to numpy array
-        img_array = np.array(image)
-        img_height, img_width = img_array.shape[:2]
-        
-        # Run detection only
-        result, _ = ocr(img_array, use_det=True, use_rec=False)
-        
-        # Check for cancellation after detection
-        if task_manager.is_cancelled():
-            return None
-        
-        # Extract bounding boxes from RapidOCR output
-        text_regions = []
-        
-        if result and len(result) > 0:
-            for poly in result:
-                if isinstance(poly, list) and len(poly) >= 4:
-                    # Extract coordinates from polygon
-                    x_coords = [float(point[0]) for point in poly]
-                    y_coords = [float(point[1]) for point in poly]
-                    x1, x2 = int(min(x_coords)), int(max(x_coords))
-                    y1, y2 = int(min(y_coords)), int(max(y_coords))
-                    
-                    if x2 > x1 and y2 > y1:
-                        text_regions.append((x1, y1, x2, y2))
-        
-        # Return all detections with default confidence scores (1.0) for compatibility
-        # Note: RapidOCR doesn't provide confidence scores in detection-only mode
-        confidence_scores = [1.0] * len(text_regions)
-        detections_with_scores = list(zip(text_regions, confidence_scores))
-        
-        if detections_with_scores:
-            print(f"Detected {len(detections_with_scores)} raw text regions (unfiltered, will be filtered by size)")
-        
-        # Cache the results if config is provided
-        if config:
-            from src.backend.state import state
-            from src.backend.core.preprocessing import get_preprocessing_hash
-            
-            preproc_hash = get_preprocessing_hash(config)
-            cache_key = (state.screenshot_version, preproc_hash)
-            state.cached_raw_detections[cache_key] = detections_with_scores
-        
-        # Return as list of ((x1, y1, x2, y2), score) tuples
-        return detections_with_scores
-    except Exception as e:
-        print(f"Error detecting text regions: {e}")
-        import traceback
-        traceback.print_exc()
+    print("Using RapidOCR for text detection (CPU via ONNX Runtime)...")
+    
+    # Get RapidOCR instance
+    ocr = _get_rapidocr_instance()
+    
+    # Convert PIL Image to numpy array
+    img_array = np.array(image)
+    img_height, img_width = img_array.shape[:2]
+    
+    # Run detection only
+    result, _ = ocr(img_array, use_det=True, use_rec=False)
+    
+    # Check for cancellation after detection
+    if task_manager.is_cancelled():
         return None
+    
+    # Extract bounding boxes from RapidOCR output
+    text_regions = []
+    
+    if result and len(result) > 0:
+        for poly in result:
+            if isinstance(poly, list) and len(poly) >= 4:
+                # Extract coordinates from polygon
+                x_coords = [float(point[0]) for point in poly]
+                y_coords = [float(point[1]) for point in poly]
+                x1, x2 = int(min(x_coords)), int(max(x_coords))
+                y1, y2 = int(min(y_coords)), int(max(y_coords))
+                
+                if x2 > x1 and y2 > y1:
+                    text_regions.append((x1, y1, x2, y2))
+    
+    # Return all detections with default confidence scores (1.0) for compatibility
+    # Note: RapidOCR doesn't provide confidence scores in detection-only mode
+    confidence_scores = [1.0] * len(text_regions)
+    detections_with_scores = list(zip(text_regions, confidence_scores))
+    
+    if detections_with_scores:
+        print(f"Detected {len(detections_with_scores)} raw text regions (unfiltered, will be filtered by size)")
+    
+    # Cache the results if config is provided
+    if config:
+        from src.backend.state import state
+        from src.backend.core.preprocessing import get_preprocessing_hash
+        
+        preproc_hash = get_preprocessing_hash(config)
+        cache_key = (state.screenshot_version, preproc_hash)
+        state.cached_raw_detections[cache_key] = detections_with_scores
+    
+    # Return as list of ((x1, y1, x2, y2), score) tuples
+    return detections_with_scores

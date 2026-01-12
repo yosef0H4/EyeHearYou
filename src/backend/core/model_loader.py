@@ -39,55 +39,48 @@ class H2OVLModel:
         self._load_model()
 
     def _load_model(self):
+        # Check Flash Attention
+        use_flash_attention = False
         try:
-            # Check Flash Attention
-            use_flash_attention = False
-            try:
-                import flash_attn
-                use_flash_attention = True
-                print("[Model] Flash Attention 2 available")
-            except (ImportError, OSError):
-                print("[Model] Flash Attention 2 not available, using SDPA fallback")
+            import flash_attn
+            use_flash_attention = True
+            print("[Model] Flash Attention 2 available")
+        except (ImportError, OSError):
+            print("[Model] Flash Attention 2 not available, using SDPA fallback")
 
-            # Load Config
-            config = AutoConfig.from_pretrained(self.model_path, trust_remote_code=True)
-            if use_flash_attention:
-                config.llm_config._attn_implementation = 'flash_attention_2'
-            else:
-                config.llm_config._attn_implementation = 'sdpa'
+        # Load Config
+        config = AutoConfig.from_pretrained(self.model_path, trust_remote_code=True)
+        if use_flash_attention:
+            config.llm_config._attn_implementation = 'flash_attention_2'
+        else:
+            config.llm_config._attn_implementation = 'sdpa'
 
-            # Load Model
-            self._model = AutoModel.from_pretrained(
-                self.model_path,
-                dtype=torch.bfloat16,
-                config=config,
-                low_cpu_mem_usage=True,
-                trust_remote_code=True
-            ).eval()
+        # Load Model
+        self._model = AutoModel.from_pretrained(
+            self.model_path,
+            dtype=torch.bfloat16,
+            config=config,
+            low_cpu_mem_usage=True,
+            trust_remote_code=True
+        ).eval()
 
-            # Device Selection
-            if torch.cuda.is_available():
-                self._device = 'cuda'
-                self._model = self._model.cuda()
-                print(f"[Model] Loaded on GPU: {torch.cuda.get_device_name(0)}")
-            else:
-                self._device = 'cpu'
-                print("[Model] Loaded on CPU (Warning: Slow)")
+        # Device Selection
+        if torch.cuda.is_available():
+            self._device = 'cuda'
+            self._model = self._model.cuda()
+            print(f"[Model] Loaded on GPU: {torch.cuda.get_device_name(0)}")
+        else:
+            self._device = 'cpu'
+            print("[Model] Loaded on CPU (Warning: Slow)")
 
-            # Load Tokenizer
-            self._tokenizer = AutoTokenizer.from_pretrained(
-                self.model_path, 
-                trust_remote_code=True, 
-                use_fast=False
-            )
-            
-            print("[Model] Model loaded successfully!")
-            
-        except Exception as e:
-            print(f"[Model] Critical Error loading model: {e}")
-            import traceback
-            traceback.print_exc()
-            raise e
+        # Load Tokenizer
+        self._tokenizer = AutoTokenizer.from_pretrained(
+            self.model_path, 
+            trust_remote_code=True, 
+            use_fast=False
+        )
+        
+        print("[Model] Model loaded successfully!")
 
     def test_text_only(self, prompt: str = "Hello") -> str:
         """Test the model with a simple text-only prompt (no image)
@@ -192,27 +185,20 @@ def preload_model(test=True):
     Returns:
         True if model loaded (and tested) successfully, False otherwise
     """
-    try:
-        print("[Model] Preloading H2OVL model...")
-        model = get_model()
-        
-        if test:
-            print("[Model] Running startup test...")
-            # Run a simple text-only inference to verify the model works
-            result = model.test_text_only("Hello")
-            if result is not None and len(result.strip()) > 0:
-                print("[Model] ✓ Model loaded and tested successfully!")
-                return True
-            else:
-                print("[Model] ⚠ Model loaded but test returned empty result")
-                return True  # Still return True, model is loaded
-        else:
-            print("[Model] ✓ Model loaded successfully!")
+    print("[Model] Preloading H2OVL model...")
+    model = get_model()
+    
+    if test:
+        print("[Model] Running startup test...")
+        # Run a simple text-only inference to verify the model works
+        result = model.test_text_only("Hello")
+        if result is not None and len(result.strip()) > 0:
+            print("[Model] ✓ Model loaded and tested successfully!")
             return True
-            
-    except Exception as e:
-        print(f"[Model] ✗ Error preloading model: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
+        else:
+            print("[Model] ⚠ Model loaded but test returned empty result")
+            return True  # Still return True, model is loaded
+    else:
+        print("[Model] ✓ Model loaded successfully!")
+        return True
 

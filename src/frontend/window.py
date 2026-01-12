@@ -169,26 +169,25 @@ class OCRWindow(QMainWindow):
         g_layout = QVBoxLayout()
         pp_config = self.config.get("preprocessing", {})
 
-        # --- Sub-section: Resizing ---
-        resize_layout = QHBoxLayout()
-        
-        # Visualizer (Left)
+        # --- Sub-section: Resizing Visualizer ---
+        # Visualizer (centered, full width)
         viz_container = QWidget()
         viz_container.setStyleSheet("background: #000; border: 1px dashed #555; border-radius: 4px;")
         viz_box = QVBoxLayout(viz_container)
         viz_box.setContentsMargins(2, 2, 2, 2)
         self.resize_viz = ResizeVizWidget()
         viz_box.addWidget(self.resize_viz, alignment=Qt.AlignmentFlag.AlignCenter)
-        resize_layout.addWidget(viz_container)
-
-        # Controls (Right)
-        resize_ctrls = QVBoxLayout()
-        current_dim = self.config.get("max_image_dimension", 1080)
+        g_layout.addWidget(viz_container)
         
+        g_layout.addWidget(self.create_separator())
+
+        # --- Sub-section: Preprocessing ---
+        
+        # Max Dimension slider (moved here from next to visualizer)
+        current_dim = self.config.get("max_image_dimension", 1080)
         dim_row = QHBoxLayout()
         dim_row.setSpacing(8)
         dim_row.addWidget(QLabel("Max Dimension:"))
-        dim_row.addStretch()
         
         dim_slider = QSlider(Qt.Orientation.Horizontal)
         dim_slider.setRange(320, 2560)
@@ -225,13 +224,7 @@ class OCRWindow(QMainWindow):
         dim_row.addWidget(dim_slider)
         dim_row.addWidget(dim_spin)
         dim_row.addWidget(dim_reset)
-        resize_ctrls.addLayout(dim_row)
-        resize_layout.addLayout(resize_ctrls)
-        
-        g_layout.addLayout(resize_layout)
-        g_layout.addWidget(self.create_separator())
-
-        # --- Sub-section: Preprocessing ---
+        g_layout.addLayout(dim_row)
         
         # Helper to create slider rows
         def add_slider_row(label, key, min_v, max_v, default, scale=1.0, is_float=False):

@@ -65,11 +65,7 @@ def main():
     print("\nPreloading model (this may take a moment on first run)...")
     
     # Preload and test the model
-    if not preload_model(test=True):
-        print("\n⚠ Warning: Model preload failed, but continuing anyway.")
-        print("The model will attempt to load on first use.")
-    else:
-        print("\n✓ Model ready!")
+    preload_model(test=True)
     
     print("\nPress Ctrl+Shift+Alt+Z to capture screenshot and extract text")
     print("Press Ctrl+C to exit")
