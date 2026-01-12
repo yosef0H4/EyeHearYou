@@ -1,0 +1,38 @@
+# CPU Requirements for Visual Novel OCR
+# For users without GPU or who want CPU-only installation
+#
+# USAGE:
+# After running 'uv sync', install these dependencies:
+#   uv pip install -r requirements-cpu.txt
+#
+# OR install manually:
+#   1. PyTorch CPU:
+#      uv pip install torch torchvision torchaudio
+#
+#   2. H2OVL dependencies:
+#      uv pip install transformers accelerate timm peft
+#
+#   3. PaddlePaddle CPU:
+#      uv pip install paddlepaddle==2.6.2
+#
+#   4. PaddleOCR:
+#      uv pip install paddleocr
+
+# PyTorch CPU version (for H2OVL-Mississippi-0.8B)
+# Note: CPU version is slower but will work without GPU
+# Flash Attention is not available for CPU, so eager attention will be used
+torch>=2.0.0
+torchvision>=0.15.0
+torchaudio>=2.0.0
+
+# H2OVL-Mississippi dependencies
+transformers>=4.40.0
+accelerate>=0.30.0
+timm>=0.9.0
+peft>=0.10.0
+
+# PaddlePaddle CPU (for text detection)
+paddlepaddle==2.6.2
+
+# PaddleOCR (install AFTER paddlepaddle)
+paddleocr

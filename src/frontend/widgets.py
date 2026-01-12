@@ -1,7 +1,7 @@
 """Custom widgets for the OCR GUI"""
 from PyQt6.QtWidgets import QWidget
 from PyQt6.QtCore import Qt, QRect
-from PyQt6.QtGui import QPainter, QPen, QColor, QBrush, QFont
+from PyQt6.QtGui import QPainter, QPen, QColor, QBrush, QFont, QPixmap
 
 
 class PaddleVizWidget(QWidget):
@@ -134,4 +134,66 @@ class MergeVizWidget(QWidget):
             painter.setFont(font)
             painter.drawText(QRect(int(ratio_x), int(box_y), int(ratio_w), base_h), 
                            Qt.AlignmentFlag.AlignCenter, "MIN")
+
+
+class ResizeVizWidget(QWidget):
+    """Visualizer for Image Dimension settings showing pixelation effect"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setMinimumSize(120, 60)
+        self.setMaximumSize(120, 60)
+        self.max_dim = 1080
+        
+        # Create a source pixmap with text to demonstrate quality
+        self.source_pix = QPixmap(240, 120)
+        self.source_pix.fill(QColor(0, 0, 0))
+        
+        p = QPainter(self.source_pix)
+        p.setPen(QColor(255, 255, 255))
+        font = QFont("Segoe UI", 24)
+        font.setBold(True)
+        p.setFont(font)
+        p.drawText(self.source_pix.rect(), Qt.AlignmentFlag.AlignCenter, "Quality")
+        p.end()
+        
+    def update_value(self, max_dim: int):
+        """Update visualization value"""
+        self.max_dim = max_dim
+        self.update()
+
+    def paintEvent(self, event):
+        """Draw the visualization"""
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, False)  # False to show pixels
+        
+        # Black background
+        painter.fillRect(self.rect(), QColor(0, 0, 0))
+        
+        # Simulate scaling
+        # We assume a "standard" source height of 1080p. 
+        # If max_dim is < 1080, we simulate the quality loss.
+        base_h = 1080.0
+        scale_factor = min(1.0, self.max_dim / base_h)
+        
+        # 1. Scale down to target resolution
+        target_w = max(1, int(self.source_pix.width() * scale_factor))
+        target_h = max(1, int(self.source_pix.height() * scale_factor))
+        
+        tiny_pix = self.source_pix.scaled(
+            target_w, target_h,
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.FastTransformation  # Pixelated scaling
+        )
+        
+        # 2. Scale back up to widget size (nearest neighbor) to show the pixels
+        final_pix = tiny_pix.scaled(
+            self.width(), self.height(),
+            Qt.AspectRatioMode.KeepAspectRatio,
+            Qt.TransformationMode.FastTransformation
+        )
+        
+        # Center drawing
+        x = (self.width() - final_pix.width()) // 2
+        y = (self.height() - final_pix.height()) // 2
+        painter.drawPixmap(x, y, final_pix)
 

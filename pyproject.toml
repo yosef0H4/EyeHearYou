@@ -14,6 +14,13 @@ dependencies = [
     "pyperclip>=1.8.2",
     "pyqt6",
     "streamlit>=1.52.2",
+    # H2OVL-Mississippi dependencies (non-torch dependencies only)
+    # NOTE: transformers, accelerate, timm, and peft are NOT included here
+    # because they require torch, which would be installed as CPU version.
+    # Install them separately with: uv pip install transformers accelerate timm peft
+    "einops>=0.7.0",
+    "sentencepiece>=0.1.99",
+    "huggingface-hub[hf-xet]>=0.36.0",
 ]
 
 # Note: PaddleOCR is NOT included in dependencies to avoid conflicts with paddlepaddle-gpu.
@@ -49,6 +56,19 @@ dependencies = [
 # image instead of detecting text regions if PaddleOCR is not installed.
 #
 # See README.md for detailed installation instructions
+#
+# H2OVL-Mississippi dependencies (torch-dependent packages):
+# NOTE: transformers, accelerate, timm, and peft are NOT included in dependencies
+# because they require torch. If listed here, uv sync will install torch (CPU version)
+# from PyPI, which would replace the CUDA version.
+#
+# For H2OVL-Mississippi-0.8B with CUDA support, install separately AFTER uv sync:
+#   1. Install PyTorch 2.7.0 with CUDA 12.8:
+#      uv pip install torch==2.7.0 torchvision==0.22.0 torchaudio==2.7.0 --index-url https://download.pytorch.org/whl/cu128
+#   2. Install flash-attention (prebuilt Windows wheel):
+#      uv pip install https://huggingface.co/lldacing/flash-attention-windows-wheel/resolve/main/flash_attn-2.7.4.post1%2Bcu128torch2.7.0cxx11abiFALSE-cp312-cp312-win_amd64.whl
+#   3. Install H2OVL dependencies:
+#      uv pip install transformers accelerate timm peft
 
 [tool.uv]
 environments = [

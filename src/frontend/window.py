@@ -15,7 +15,7 @@ from PyQt6.QtGui import QPixmap, QImage, QPen, QColor, QBrush, QPainter, QFont
 from src.backend.core.config import load_config, CONFIG_FILE
 from src.backend.core.capture import capture_screenshot
 from src.backend.state import state
-from src.frontend.widgets import PaddleVizWidget, MergeVizWidget
+from src.frontend.widgets import PaddleVizWidget, MergeVizWidget, ResizeVizWidget
 from src.frontend.worker import OCRWorker
 from src.frontend.theme import DARK_THEME_STYLESHEET
 from src.frontend.constants import KEYBOARD_AVAILABLE, CLIPBOARD_AVAILABLE, keyboard, pyperclip
@@ -62,6 +62,9 @@ class OCRWindow(QMainWindow):
 
         # API Settings Group
         self.create_api_group(controls_layout)
+
+        # Preprocessing Group
+        self.create_preprocessing_group(controls_layout)
 
         # Detection Settings Group
         self.create_detection_group(controls_layout)
@@ -168,6 +171,85 @@ class OCRWindow(QMainWindow):
         self.model_input.editingFinished.connect(self.update_api_config)
         model_layout.addWidget(self.model_input)
         g_layout.addLayout(model_layout)
+
+        group.setLayout(g_layout)
+        layout.addWidget(group)
+
+    def create_preprocessing_group(self, layout):
+        """Create Image Processing settings group with pixelation preview"""
+        group = QGroupBox("Image Processing")
+        g_layout = QVBoxLayout()
+
+        # Visualizer
+        viz_container = QWidget()
+        viz_container.setStyleSheet("background: #000; border: 1px dashed #555; border-radius: 4px;")
+        viz_layout = QVBoxLayout(viz_container)
+        viz_layout.setContentsMargins(0, 5, 0, 5)
+        self.resize_viz = ResizeVizWidget()
+        viz_layout.addWidget(self.resize_viz, alignment=Qt.AlignmentFlag.AlignCenter)
+        g_layout.addWidget(viz_container)
+
+        # Max Dimension Controls
+        dim_layout = QHBoxLayout()
+        dim_label = QLabel("Max Dimension:")
+        
+        current_dim = self.config.get("max_image_dimension", 1080)
+        self.dim_val_label = QLabel(f"{current_dim}px")
+        self.dim_val_label.setMinimumWidth(50)
+        self.dim_val_label.setStyleSheet("color: #aaa; font-weight: 600;")
+        
+        dim_slider = QSlider(Qt.Orientation.Horizontal)
+        dim_slider.setMinimum(320)
+        dim_slider.setMaximum(2560)
+        dim_slider.setValue(current_dim)
+        
+        dim_spin = QSpinBox()
+        dim_spin.setMinimum(1)  # Only positive numbers
+        dim_spin.setMaximum(999999)  # Very high limit, effectively unlimited
+        dim_spin.setValue(current_dim)
+        dim_spin.setMaximumWidth(80)
+
+        def on_dim_change(v):
+            """Update label and visualizer when dimension changes"""
+            self.dim_val_label.setText(f"{v}px")
+            self.config["max_image_dimension"] = v
+            self.resize_viz.update_value(v)
+            
+        def on_slider_move(v):
+            """Handle slider movement"""
+            dim_spin.blockSignals(True)
+            dim_spin.setValue(v)
+            dim_spin.blockSignals(False)
+            on_dim_change(v)
+
+        def on_spin_change(v):
+            """Handle spinbox change"""
+            # Only update slider if value is within slider range
+            if dim_slider.minimum() <= v <= dim_slider.maximum():
+                dim_slider.blockSignals(True)
+                dim_slider.setValue(v)
+                dim_slider.blockSignals(False)
+            on_dim_change(v)
+            self.save_config()  # Save immediately on spinbox finish
+
+        dim_slider.valueChanged.connect(on_slider_move)
+        dim_slider.sliderReleased.connect(self.save_config)
+        dim_spin.valueChanged.connect(on_spin_change)
+
+        dim_layout.addWidget(dim_label)
+        dim_layout.addWidget(dim_slider)
+        dim_layout.addWidget(dim_spin)
+        dim_layout.addWidget(self.dim_val_label)
+        
+        g_layout.addLayout(dim_layout)
+        
+        info_label = QLabel("Resizes image before sending to API to save tokens/costs. Lower values = more pixelated.")
+        info_label.setStyleSheet("font-size: 10px; color: #888; font-style: italic;")
+        info_label.setWordWrap(True)
+        g_layout.addWidget(info_label)
+
+        # Initialize viz
+        self.resize_viz.update_value(current_dim)
 
         group.setLayout(g_layout)
         layout.addWidget(group)

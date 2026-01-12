@@ -1,0 +1,58 @@
+# GPU Requirements for Visual Novel OCR
+# For users with NVIDIA GPU and CUDA support
+#
+# USAGE:
+# After running 'uv sync', install these dependencies:
+#   uv pip install -r requirements-gpu.txt
+#
+# OR install manually (recommended for better control):
+#   1. PyTorch 2.7.0 with CUDA 12.8:
+#      uv pip install torch==2.7.0 torchvision==0.22.0 torchaudio==2.7.0 --index-url https://download.pytorch.org/whl/cu128
+#
+#   2. Flash Attention (Windows prebuilt wheel):
+#      uv pip install https://huggingface.co/lldacing/flash-attention-windows-wheel/resolve/main/flash_attn-2.7.4.post1%2Bcu128torch2.7.0cxx11abiFALSE-cp312-cp312-win_amd64.whl
+#
+#   3. H2OVL dependencies:
+#      uv pip install transformers accelerate timm peft
+#
+#   4. PaddlePaddle GPU (check your CUDA version with: nvidia-smi):
+#      # For CUDA 12.9:
+#      uv pip install --pre paddlepaddle-gpu -i https://www.paddlepaddle.org.cn/packages/nightly/cu129/
+#      # For CUDA 12.8:
+#      uv pip install --pre paddlepaddle-gpu -i https://www.paddlepaddle.org.cn/packages/nightly/cu128/
+#      # For CUDA 12.1:
+#      uv pip install --pre paddlepaddle-gpu -i https://www.paddlepaddle.org.cn/packages/nightly/cu121/
+#      # For CUDA 11.8:
+#      uv pip install paddlepaddle-gpu==2.6.2 -i https://www.paddlepaddle.org.cn/packages/stable/cu118/
+#      # For CUDA 10.2 (from PyPI):
+#      uv pip install paddlepaddle-gpu==2.6.2
+#
+#   5. PaddleOCR (install AFTER paddlepaddle-gpu):
+#      uv pip install paddleocr
+
+# PyTorch 2.7.0 with CUDA 12.8
+--index-url https://download.pytorch.org/whl/cu128
+torch==2.7.0
+torchvision==0.22.0
+torchaudio==2.7.0
+
+# Flash Attention 2 (Windows prebuilt wheel for torch 2.7.0 + CUDA 12.8)
+# Note: This URL may need to be installed separately due to URL encoding
+# Use: uv pip install "https://huggingface.co/lldacing/flash-attention-windows-wheel/resolve/main/flash_attn-2.7.4.post1%2Bcu128torch2.7.0cxx11abiFALSE-cp312-cp312-win_amd64.whl"
+
+# H2OVL-Mississippi dependencies
+transformers>=4.40.0
+accelerate>=0.30.0
+timm>=0.9.0
+peft>=0.10.0
+
+# PaddlePaddle GPU - UNCOMMENT THE LINE FOR YOUR CUDA VERSION
+# Check your CUDA version first: nvidia-smi
+# --pre -i https://www.paddlepaddle.org.cn/packages/nightly/cu129/ paddlepaddle-gpu
+# --pre -i https://www.paddlepaddle.org.cn/packages/nightly/cu128/ paddlepaddle-gpu
+# --pre -i https://www.paddlepaddle.org.cn/packages/nightly/cu121/ paddlepaddle-gpu
+# -i https://www.paddlepaddle.org.cn/packages/stable/cu118/ paddlepaddle-gpu==2.6.2
+# paddlepaddle-gpu==2.6.2
+
+# PaddleOCR (install AFTER paddlepaddle-gpu)
+paddleocr
