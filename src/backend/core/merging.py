@@ -7,9 +7,10 @@ def get_overlap(min1, max1, min2, max2):
     return max(0, min(max1, max2) - max(min1, min2))
 
 
-def should_merge(box1, box2, v_tol=30, h_tol=50, w_ratio=0.3):
+def should_merge(box1, box2, v_ratio=0.5, h_ratio=1.5, w_ratio=0.3):
     """
-    Determine if two boxes should be merged based on horizontal OR vertical proximity.
+    Adaptive merge based on the size of the boxes themselves.
+    Uses ratios relative to text height instead of fixed pixels.
     
     This function implements two types of merging:
     1. Horizontal Merging (Words → Lines): Merges boxes that are side-by-side
@@ -17,8 +18,8 @@ def should_merge(box1, box2, v_tol=30, h_tol=50, w_ratio=0.3):
     
     Args:
         box1, box2: (x1, y1, x2, y2) tuples
-        v_tol: Vertical tolerance (gap between lines)
-        h_tol: Horizontal tolerance (gap between words)
+        v_ratio: Max vertical gap as a ratio of average box height (e.g. 0.5 = half a line height)
+        h_ratio: Max horizontal gap as a ratio of average box height (e.g. 1.5 = 1.5x line height)
         w_ratio: Width ratio threshold (used for vertical merging validation)
     """
     x1_1, y1_1, x2_1, y2_1 = box1
@@ -28,53 +29,52 @@ def should_merge(box1, box2, v_tol=30, h_tol=50, w_ratio=0.3):
     w1, h1 = x2_1 - x1_1, y2_1 - y1_1
     w2, h2 = x2_2 - x1_2, y2_2 - y1_2
     min_h = min(h1, h2)
-    min_w = min(w1, w2)
+    
+    # Determine "reference size" for these two boxes
+    # We use the average height to be adaptive
+    ref_h = (h1 + h2) / 2
+    
+    # Use adaptive ratios
+    max_v_gap = ref_h * v_ratio
+    max_h_gap = ref_h * h_ratio
     
     # --- 1. Horizontal Merge (Words on same line) ---
     # Condition: High vertical overlap (they are on the same "row")
     y_overlap = get_overlap(y1_1, y2_1, y1_2, y2_2)
-    is_same_row = y_overlap > (min_h * 0.4)  # Overlap at least 40% of height
+    is_same_row = y_overlap > (min_h * 0.5)  # Overlap at least 50% of the smaller box's height
     
     if is_same_row:
         # Check horizontal gap (distance between right of A and left of B)
-        # We allow negative gap (overlap) or positive gap (space)
         gap = max(x1_1, x1_2) - min(x2_1, x2_2)
         
-        # Merge if gap is small enough (roughly 1-2 character widths)
-        # Note: h_tol here acts as "max space width"
-        if gap < h_tol:
+        # ADAPTIVE LOGIC: Gap limit depends on text size
+        # If text is 100px tall, we allow 150px gap (h_ratio=1.5).
+        # If text is 10px tall, we allow 15px gap.
+        if gap < max_h_gap:
             return True
 
     # --- 2. Vertical Merge (Lines in a paragraph) ---
-    # Condition: High horizontal overlap OR visually aligned (center/left)
-    x_overlap = get_overlap(x1_1, x2_1, x1_2, x2_2)
-    
-    # Check if vertically adjacent (one bottom close to other top)
+    # Check vertical gap
     v_gap = max(y1_1, y1_2) - min(y2_1, y2_2)
     
-    if v_gap < v_tol:
-        # Strict alignment check:
-        # Either significant horizontal overlap (stacked text)
-        # w_ratio controls how much overlap is needed relative to the smaller box width
-        if x_overlap > (min_w * w_ratio):
-            return True
-            
-        # OR Left-aligned (roughly)
-        if abs(x1_1 - x1_2) < 20: 
-            return True
-            
-        # OR Center-aligned (roughly)
-        center1 = (x1_1 + x2_1) / 2
-        center2 = (x1_2 + x2_2) / 2
-        if abs(center1 - center2) < 20:
+    # ADAPTIVE LOGIC: Vertical gap limit depends on text size
+    if v_gap < max_v_gap:
+        # For vertical merge, they must also be aligned horizontally
+        x_overlap = get_overlap(x1_1, x2_1, x1_2, x2_2)
+        
+        # Must overlap horizontally by some amount relative to width
+        # OR be left-aligned (x1 coords close)
+        # Left alignment tolerance: ~50% of font height (slight indentation allowed)
+        alignment_tol = ref_h * 0.5
+        if x_overlap > 0 or abs(x1_1 - x1_2) < alignment_tol:
             return True
             
     return False
 
 
-def merge_close_text_boxes(text_regions, vertical_tolerance=30, horizontal_tolerance=50, width_ratio_threshold=0.3):
+def merge_close_text_boxes(text_regions, vertical_ratio=0.5, horizontal_ratio=1.5, width_ratio_threshold=0.3):
     """
-    Merge text boxes that are close together (both horizontally and vertically).
+    Merge text boxes that are close together using adaptive ratios.
     
     This function handles two types of merging:
     1. Horizontal Merging: Merges words that are side-by-side into lines
@@ -82,9 +82,9 @@ def merge_close_text_boxes(text_regions, vertical_tolerance=30, horizontal_toler
     
     Args:
         text_regions: List of (x1, y1, x2, y2) bounding boxes
-        vertical_tolerance: Max gap between lines (pixels)
-        horizontal_tolerance: Max gap between words (pixels)
-        width_ratio_threshold: (Legacy/Optional) Kept for API compatibility
+        vertical_ratio: Multiplier of text height for vertical merging (lines) - default 0.5
+        horizontal_ratio: Multiplier of text height for horizontal merging (words) - default 1.5
+        width_ratio_threshold: Width overlap ratio for vertical merging validation
     
     Returns:
         Tuple of (merged_boxes, is_merged_list, original_groups) where:
@@ -97,11 +97,9 @@ def merge_close_text_boxes(text_regions, vertical_tolerance=30, horizontal_toler
         return text_regions, [False] * len(text_regions) if text_regions else [], [[list(r)] for r in text_regions] if text_regions else []
     
     # Convert to list of lists for easier manipulation
-    # Store as simple list of coordinates
     boxes = [list(bbox) for bbox in text_regions]
     
-    # Adjacency matrix or graph-based merging is cleaner, 
-    # but iterative clustering is robust for this use case.
+    # Iterative clustering
     merged = []
     is_merged = []
     original_groups = []
@@ -128,7 +126,8 @@ def merge_close_text_boxes(text_regions, vertical_tolerance=30, horizontal_toler
                 # Check if box2 can be merged with ANY box currently in the group
                 can_merge = False
                 for group_box in group:
-                    if should_merge(group_box, box2, vertical_tolerance, horizontal_tolerance, width_ratio_threshold):
+                    if should_merge(group_box, box2, v_ratio=vertical_ratio, h_ratio=horizontal_ratio, 
+                                  w_ratio=width_ratio_threshold):
                         can_merge = True
                         break
                 

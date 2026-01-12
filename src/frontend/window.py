@@ -35,10 +35,12 @@ class OCRWindow(QMainWindow):
             "brightness": 0
         },
         "text_detection": {
-            "min_width": 30,
-            "min_height": 30,
-            "merge_vertical_tolerance": 4,
-            "merge_horizontal_tolerance": 50,
+            # Adaptive parameters (works across all screen sizes and font sizes)
+            "min_height_ratio": 0.01,
+            "min_width_ratio": 0.0,
+            "median_height_fraction": 0.4,
+            "merge_vertical_ratio": 0.5,
+            "merge_horizontal_ratio": 1.5,
             "merge_width_ratio_threshold": 0.3
         },
         "text_sorting": {
@@ -426,86 +428,96 @@ class OCRWindow(QMainWindow):
             g_layout.addWidget(lbl)
 
         # --- Section 1: Detection (Size) ---
-        add_header("1. Detection Filter (RapidOCR)")
+        add_header("1. Detection Filter (Adaptive)")
+        
+        # Info label explaining adaptive logic
+        info_label = QLabel("Uses ratios relative to text size - works across all screen sizes!")
+        info_label.setStyleSheet("color: #4CAF50; font-size: 9px; font-style: italic; padding: 3px;")
+        g_layout.addWidget(info_label)
         
         def update_viz_detection():
-            w = self.config["text_detection"].get("min_width", 30)
-            h = self.config["text_detection"].get("min_height", 30)
+            # For visualization, estimate pixels from ratios (assume 1920x1080 screen)
+            # This is just for the visualizer widget, actual filtering uses ratios
+            min_h_ratio = self.config["text_detection"].get("min_height_ratio", 0.01)
+            h = int(1080 * min_h_ratio)  # Estimate for visualization
+            w = h  # Use same for width
             self.settings_viz.update_detection(w, h)
 
-        # Min Width
-        w_row = QHBoxLayout()
-        w_row.setSpacing(8)
-        w_row.addWidget(QLabel("Min Width:"))
-        w_sl = QSlider(Qt.Orientation.Horizontal)
-        w_sl.setRange(5, 300)
-        w_sl.setValue(td_config.get("min_width", 30))
-        w_sp = QSpinBox()
-        w_sp.setRange(5, 1000)
-        w_sp.setValue(td_config.get("min_width", 30))
-        w_sp.setSuffix(" px")
-        w_sp.setMaximumWidth(70)
+        # Min Height Ratio (as % of screen height)
+        h_ratio_row = QHBoxLayout()
+        h_ratio_row.setSpacing(8)
+        h_ratio_row.addWidget(QLabel("Min Height Ratio:"))
+        h_ratio_sl = QSlider(Qt.Orientation.Horizontal)
+        h_ratio_sl.setRange(0, 50)  # 0% to 5% of screen height
+        h_ratio_val = td_config.get("min_height_ratio", 0.01)
+        h_ratio_sl.setValue(int(h_ratio_val * 1000))  # Convert to per-mille
+        h_ratio_sp = QDoubleSpinBox()
+        h_ratio_sp.setRange(0.0, 0.05)
+        h_ratio_sp.setSingleStep(0.001)
+        h_ratio_sp.setValue(h_ratio_val)
+        h_ratio_sp.setSuffix(" %")
+        h_ratio_sp.setMaximumWidth(70)
 
-        def on_w_change(v):
+        def on_h_ratio_change(v):
+            real_val = v / 1000.0 if isinstance(v, int) else v
             if "text_detection" not in self.config: self.config["text_detection"] = {}
-            self.config["text_detection"]["min_width"] = v
-            w_sl.blockSignals(True); w_sl.setValue(v); w_sl.blockSignals(False)
-            w_sp.blockSignals(True); w_sp.setValue(v); w_sp.blockSignals(False)
+            self.config["text_detection"]["min_height_ratio"] = real_val
+            h_ratio_sl.blockSignals(True); h_ratio_sl.setValue(int(real_val * 1000)); h_ratio_sl.blockSignals(False)
+            h_ratio_sp.blockSignals(True); h_ratio_sp.setValue(real_val); h_ratio_sp.blockSignals(False)
             update_viz_detection()
             self.preview_live_filtering()
         
-        w_sl.valueChanged.connect(on_w_change)
-        w_sl.sliderReleased.connect(self.finalize_live_preview)
-        w_sp.valueChanged.connect(on_w_change)
-        w_sp.editingFinished.connect(self.finalize_live_preview)
+        h_ratio_sl.valueChanged.connect(on_h_ratio_change)
+        h_ratio_sl.sliderReleased.connect(self.finalize_live_preview)
+        h_ratio_sp.valueChanged.connect(on_h_ratio_change)
+        h_ratio_sp.editingFinished.connect(self.finalize_live_preview)
         
-        # Reset button
-        def reset_w():
-            default_val = self.DEFAULT_CONFIG["text_detection"].get("min_width", 30)
-            w_sl.setValue(default_val)
-            w_sp.setValue(default_val)
-            on_w_change(default_val)
-        w_reset = self.create_reset_button(reset_w)
+        def reset_h_ratio():
+            default_val = self.DEFAULT_CONFIG["text_detection"].get("min_height_ratio", 0.01)
+            h_ratio_sl.setValue(int(default_val * 1000))
+            h_ratio_sp.setValue(default_val)
+            on_h_ratio_change(default_val)
+        h_ratio_reset = self.create_reset_button(reset_h_ratio)
         
-        w_row.addWidget(w_sl); w_row.addWidget(w_sp); w_row.addWidget(w_reset)
-        g_layout.addLayout(w_row)
+        h_ratio_row.addWidget(h_ratio_sl); h_ratio_row.addWidget(h_ratio_sp); h_ratio_row.addWidget(h_ratio_reset)
+        g_layout.addLayout(h_ratio_row)
 
-        # Min Height
-        h_row = QHBoxLayout()
-        h_row.setSpacing(8)
-        h_row.addWidget(QLabel("Min Height:"))
-        h_sl = QSlider(Qt.Orientation.Horizontal)
-        h_sl.setRange(5, 300)
-        h_sl.setValue(td_config.get("min_height", 30))
-        h_sp = QSpinBox()
-        h_sp.setRange(5, 1000)
-        h_sp.setValue(td_config.get("min_height", 30))
-        h_sp.setSuffix(" px")
-        h_sp.setMaximumWidth(70)
+        # Median Height Fraction (noise filter)
+        median_row = QHBoxLayout()
+        median_row.setSpacing(8)
+        median_row.addWidget(QLabel("Noise Filter:"))
+        median_sl = QSlider(Qt.Orientation.Horizontal)
+        median_sl.setRange(10, 100)  # 0.1 to 1.0
+        median_val = td_config.get("median_height_fraction", 0.4)
+        median_sl.setValue(int(median_val * 100))
+        median_sp = QDoubleSpinBox()
+        median_sp.setRange(0.1, 1.0)
+        median_sp.setSingleStep(0.05)
+        median_sp.setValue(median_val)
+        median_sp.setMaximumWidth(70)
 
-        def on_h_change(v):
+        def on_median_change(v):
+            real_val = v / 100.0 if isinstance(v, int) else v
             if "text_detection" not in self.config: self.config["text_detection"] = {}
-            self.config["text_detection"]["min_height"] = v
-            h_sl.blockSignals(True); h_sl.setValue(v); h_sl.blockSignals(False)
-            h_sp.blockSignals(True); h_sp.setValue(v); h_sp.blockSignals(False)
-            update_viz_detection()
+            self.config["text_detection"]["median_height_fraction"] = real_val
+            median_sl.blockSignals(True); median_sl.setValue(int(real_val * 100)); median_sl.blockSignals(False)
+            median_sp.blockSignals(True); median_sp.setValue(real_val); median_sp.blockSignals(False)
             self.preview_live_filtering()
-            
-        h_sl.valueChanged.connect(on_h_change)
-        h_sl.sliderReleased.connect(self.finalize_live_preview)
-        h_sp.valueChanged.connect(on_h_change)
-        h_sp.editingFinished.connect(self.finalize_live_preview)
         
-        # Reset button
-        def reset_h():
-            default_val = self.DEFAULT_CONFIG["text_detection"].get("min_height", 30)
-            h_sl.setValue(default_val)
-            h_sp.setValue(default_val)
-            on_h_change(default_val)
-        h_reset = self.create_reset_button(reset_h)
+        median_sl.valueChanged.connect(on_median_change)
+        median_sl.sliderReleased.connect(self.finalize_live_preview)
+        median_sp.valueChanged.connect(on_median_change)
+        median_sp.editingFinished.connect(self.finalize_live_preview)
         
-        h_row.addWidget(h_sl); h_row.addWidget(h_sp); h_row.addWidget(h_reset)
-        g_layout.addLayout(h_row)
+        def reset_median():
+            default_val = self.DEFAULT_CONFIG["text_detection"].get("median_height_fraction", 0.4)
+            median_sl.setValue(int(default_val * 100))
+            median_sp.setValue(default_val)
+            on_median_change(default_val)
+        median_reset = self.create_reset_button(reset_median)
+        
+        median_row.addWidget(median_sl); median_row.addWidget(median_sp); median_row.addWidget(median_reset)
+        g_layout.addLayout(median_row)
 
         g_layout.addWidget(self.create_separator())
 
@@ -550,75 +562,59 @@ class OCRWindow(QMainWindow):
         dir_row.addWidget(dir_reset)
         g_layout.addLayout(dir_row)
 
-        # Viz Update Logic for Merge
+        # Viz Update Logic for Merge (uses ratios now)
         def update_viz_merge():
-            vt = self.config["text_detection"].get("merge_vertical_tolerance", 4)
-            ht = self.config["text_detection"].get("merge_horizontal_tolerance", 50)
+            # For visualization, estimate pixel values from ratios (assume 20px text height)
+            v_ratio = self.config["text_detection"].get("merge_vertical_ratio", 0.5)
+            h_ratio = self.config["text_detection"].get("merge_horizontal_ratio", 1.5)
             rat = self.config["text_detection"].get("merge_width_ratio_threshold", 0.3)
+            # Estimate pixels for visualization (assume 20px text height)
+            vt = int(v_ratio * 20)
+            ht = int(h_ratio * 20)
             self.settings_viz.update_merge(vt, ht, rat)
 
-        # Helper for merge sliders
-        def add_merge_slider(label, key, default, max_val=300, is_float=False):
+        # Helper for merge ratio sliders
+        def add_merge_ratio_slider(label, key, default, max_val=5.0, tooltip=""):
             row = QHBoxLayout()
             row.setSpacing(8)
-            row.addWidget(QLabel(label))
+            lbl = QLabel(label)
+            if tooltip:
+                lbl.setToolTip(tooltip)
+            row.addWidget(lbl)
             
             sl = QSlider(Qt.Orientation.Horizontal)
-            sp = QDoubleSpinBox() if is_float else QSpinBox()
+            sl.setRange(0, int(max_val * 100))  # 0.0 to max_val
+            val = td_config.get(key, default)
+            sl.setValue(int(val * 100))
+            
+            sp = QDoubleSpinBox()
+            sp.setRange(0.0, max_val)
+            sp.setSingleStep(0.1)
+            sp.setValue(val)
+            sp.setSuffix("x")
             sp.setMaximumWidth(70)
             
-            if is_float:
-                sl.setRange(0, 100)
-                sp.setRange(0.0, 1.0)
-                sp.setSingleStep(0.01)
-                val = td_config.get(key, default)
-                sl.setValue(int(val * 100))
-                sp.setValue(val)
-            else:
-                sl.setRange(0, max_val)
-                sp.setRange(0, 1000)
-                sp.setSuffix(" px")
-                val = td_config.get(key, default)
-                sl.setValue(val)
-                sp.setValue(val)
-            
             def on_change(v):
-                real_val = v / 100.0 if is_float else v
+                real_val = v / 100.0 if isinstance(v, int) else v
                 if "text_detection" not in self.config: self.config["text_detection"] = {}
                 self.config["text_detection"][key] = real_val
                 
-                # Update UI counterparts
-                if is_float:
-                    sl.blockSignals(True); sl.setValue(int(real_val*100)); sl.blockSignals(False)
-                    sp.blockSignals(True); sp.setValue(real_val); sp.blockSignals(False)
-                else:
-                    sl.blockSignals(True); sl.setValue(real_val); sl.blockSignals(False)
-                    sp.blockSignals(True); sp.setValue(real_val); sp.blockSignals(False)
+                sl.blockSignals(True); sl.setValue(int(real_val * 100)); sl.blockSignals(False)
+                sp.blockSignals(True); sp.setValue(real_val); sp.blockSignals(False)
                 
                 update_viz_merge()
                 self.preview_live_merging()
             
-            if is_float:
-                sl.valueChanged.connect(on_change)
-                # Double spin box emits float
-                sp.valueChanged.connect(on_change) 
-            else:
-                sl.valueChanged.connect(on_change)
-                sp.valueChanged.connect(on_change)
-
+            sl.valueChanged.connect(on_change)
+            sp.valueChanged.connect(on_change)
             sl.sliderReleased.connect(self.finalize_live_preview)
             sp.editingFinished.connect(self.finalize_live_preview)
             
-            # Reset button
             def reset_val():
                 default_val = self.DEFAULT_CONFIG["text_detection"].get(key, default)
-                if is_float:
-                    sl.setValue(int(default_val * 100))
-                    sp.setValue(default_val)
-                else:
-                    sl.setValue(int(default_val))
-                    sp.setValue(int(default_val))
-                on_change(default_val if not is_float else int(default_val * 100))
+                sl.setValue(int(default_val * 100))
+                sp.setValue(default_val)
+                on_change(default_val)
             reset_btn = self.create_reset_button(reset_val)
             
             row.addWidget(sl)
@@ -626,9 +622,12 @@ class OCRWindow(QMainWindow):
             row.addWidget(reset_btn)
             g_layout.addLayout(row)
 
-        add_merge_slider("V. Tolerance:", "merge_vertical_tolerance", 4)
-        add_merge_slider("H. Tolerance:", "merge_horizontal_tolerance", 50)
-        add_merge_slider("Width Ratio:", "merge_width_ratio_threshold", 0.3, is_float=True)
+        add_merge_ratio_slider("V. Ratio:", "merge_vertical_ratio", 0.5, max_val=2.0, 
+                              tooltip="Vertical gap as multiplier of text height (e.g., 0.5 = half a line)")
+        add_merge_ratio_slider("H. Ratio:", "merge_horizontal_ratio", 1.5, max_val=5.0,
+                              tooltip="Horizontal gap as multiplier of text height (e.g., 1.5 = 1.5x line height)")
+        add_merge_ratio_slider("Width Ratio:", "merge_width_ratio_threshold", 0.3, max_val=1.0,
+                              tooltip="Minimum horizontal overlap ratio for vertical merging")
 
         # Line Grouping (Sorting)
         grp_row = QHBoxLayout()
@@ -843,16 +842,25 @@ class OCRWindow(QMainWindow):
             self.scene.removeItem(item)
 
     def preview_live_filtering(self):
-        """Show raw boxes: Green (Keep) vs Red (Discard) based on current min_width/min_height"""
+        """Show raw boxes: Green (Keep) vs Red (Discard) based on adaptive filtering"""
         if not self.raw_boxes or not self.pixmap_item:
             return
 
         self.clear_all_boxes()
         
-        min_w = self.config["text_detection"].get("min_width", 30)
-        min_h = self.config["text_detection"].get("min_height", 30)
         img_w = self.pixmap_item.pixmap().width()
         img_h = self.pixmap_item.pixmap().height()
+        
+        # Use adaptive parameters only
+        td_config = self.config.get("text_detection", {})
+        min_height_ratio = td_config.get("min_height_ratio", 0.0)
+        median_height_fraction = td_config.get("median_height_fraction", 0.4)
+        min_width_ratio = td_config.get("min_width_ratio", 0.0)
+        
+        # Calculate median height for adaptive filtering
+        heights = [y2 - y1 for x1, y1, x2, y2 in self.raw_boxes if x2 > x1 and y2 > y1]
+        import numpy as np
+        median_h = np.median(heights) if heights else 0
         
         # Prepare pens/brushes
         pen_keep = QPen(QColor(0, 255, 0), 2)  # Green solid
@@ -862,7 +870,7 @@ class OCRWindow(QMainWindow):
         pen_discard.setStyle(Qt.PenStyle.DashLine)
         brush_discard = QBrush(QColor(255, 0, 0, 30))  # Semi-transparent red
         
-        # Filter logic (duplicated from backend for speed)
+        # Filter logic using adaptive parameters only
         for (x1, y1, x2, y2) in self.raw_boxes:
             # Clamp
             x1 = max(0, min(x1, img_w)); x2 = max(0, min(x2, img_w))
@@ -872,7 +880,16 @@ class OCRWindow(QMainWindow):
             
             if w <= 0 or h <= 0: continue
             
-            if w > min_w and h > min_h:
+            # Apply adaptive filtering only
+            keep = True
+            if min_height_ratio > 0 and h < (img_h * min_height_ratio):
+                keep = False
+            if min_width_ratio > 0 and w < (img_w * min_width_ratio):
+                keep = False
+            if median_h > 0 and h < (median_h * median_height_fraction) and w < (median_h * 2):
+                keep = False
+            
+            if keep:
                 # Keep (Green)
                 self.scene.addRect(float(x1), float(y1), float(w), float(h), pen_keep, brush_keep)
             else:
@@ -884,13 +901,19 @@ class OCRWindow(QMainWindow):
         if not self.raw_boxes or not self.pixmap_item:
             return
 
-        # 1. Local Filtering
-        min_w = self.config["text_detection"].get("min_width", 30)
-        min_h = self.config["text_detection"].get("min_height", 30)
+        # 1. Local Filtering using adaptive parameters only
+        td_config = self.config.get("text_detection", {})
         img_w = self.pixmap_item.pixmap().width() if self.pixmap_item else 2000
         img_h = self.pixmap_item.pixmap().height() if self.pixmap_item else 2000
         
-        filtered = filter_text_regions(self.raw_boxes, (img_h, img_w), min_width=min_w, min_height=min_h)
+        min_width_ratio = td_config.get("min_width_ratio", 0.0)
+        min_height_ratio = td_config.get("min_height_ratio", 0.0)
+        median_height_fraction = td_config.get("median_height_fraction", 0.4)
+        
+        filtered = filter_text_regions(self.raw_boxes, (img_h, img_w), 
+                                      min_width_ratio=min_width_ratio,
+                                      min_height_ratio=min_height_ratio,
+                                      median_height_fraction=median_height_fraction)
         
         # 2. Local Sorting
         sort_config = self.config.get("text_sorting", {})
@@ -901,13 +924,16 @@ class OCRWindow(QMainWindow):
             filtered, direction=direction, group_tolerance=group_tol
         )
         
-        # 3. Local Merging
-        td_config = self.config.get("text_detection", {})
+        # 3. Local Merging using adaptive ratios only
+        merge_vertical_ratio = td_config.get("merge_vertical_ratio", 0.5)
+        merge_horizontal_ratio = td_config.get("merge_horizontal_ratio", 1.5)
+        merge_width_ratio_threshold = td_config.get("merge_width_ratio_threshold", 0.3)
+        
         merged, is_merged_flags, original_groups = merge_close_text_boxes(
             sorted_regions,
-            vertical_tolerance=td_config.get("merge_vertical_tolerance", 4),
-            horizontal_tolerance=td_config.get("merge_horizontal_tolerance", 50),
-            width_ratio_threshold=td_config.get("merge_width_ratio_threshold", 0.3)
+            vertical_ratio=merge_vertical_ratio,
+            horizontal_ratio=merge_horizontal_ratio,
+            width_ratio_threshold=merge_width_ratio_threshold
         )
         
         # 4. Re-Sort Results
@@ -1046,8 +1072,12 @@ class OCRWindow(QMainWindow):
     def draw_tolerance_zones(self, merged_boxes_info: List[dict], force_draw_all=False):
         """Draw yellow tolerance zones around original boxes"""
         td_config = self.config.get("text_detection", {})
-        v_tol = td_config.get("merge_vertical_tolerance", 4)
-        h_tol = td_config.get("merge_horizontal_tolerance", 50)
+        # Use adaptive ratios, estimate pixels for visualization (assume 20px text height)
+        v_ratio = td_config.get("merge_vertical_ratio", 0.5)
+        h_ratio = td_config.get("merge_horizontal_ratio", 1.5)
+        # Estimate pixels for visualization (assume average text height of 20px)
+        v_tol = int(v_ratio * 20)
+        h_tol = int(h_ratio * 20)
 
         pen = QPen(QColor(255, 255, 0), 1)  # Yellow outline
         pen.setStyle(Qt.PenStyle.DashLine)

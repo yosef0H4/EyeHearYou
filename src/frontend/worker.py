@@ -71,21 +71,23 @@ class OCRWorker(QThread):
             # Extract raw boxes for UI
             all_boxes = [bbox for bbox, score in raw_detections_with_scores]
             
-            # Apply filters
+            # Apply filters using adaptive parameters
             # Note: RapidOCR doesn't provide confidence scores in detection-only mode,
             # so we skip confidence filtering and only filter by size
-            min_width = int(td_config.get("min_width", 30))
-            min_height = int(td_config.get("min_height", 30))
-            
             img_height, img_width = image.size[1], image.size[0]
             
-            # Apply size filter
+            # Apply size filter using adaptive parameters only
             self.progress_signal.emit("Applying size filter...", 20)
+            min_width_ratio = td_config.get("min_width_ratio", 0.0)
+            min_height_ratio = td_config.get("min_height_ratio", 0.0)
+            median_height_fraction = td_config.get("median_height_fraction", 0.4)
+            
             size_filtered = filter_text_regions(
                 all_boxes,
                 (img_height, img_width),
-                min_width=min_width,
-                min_height=min_height
+                min_width_ratio=min_width_ratio,
+                min_height_ratio=min_height_ratio,
+                median_height_fraction=median_height_fraction
             )
             
             if self.is_cancelled:
@@ -127,11 +129,16 @@ class OCRWorker(QThread):
             if self.is_cancelled:
                 return
 
+            # Use adaptive ratios only
+            merge_vertical_ratio = td_config.get("merge_vertical_ratio", 0.5)
+            merge_horizontal_ratio = td_config.get("merge_horizontal_ratio", 1.5)
+            merge_width_ratio_threshold = td_config.get("merge_width_ratio_threshold", 0.3)
+            
             merged_regions, is_merged, original_groups = merge_close_text_boxes(
                 regions,
-                vertical_tolerance=td_config.get("merge_vertical_tolerance", 4),
-                horizontal_tolerance=td_config.get("merge_horizontal_tolerance", 50),
-                width_ratio_threshold=td_config.get("merge_width_ratio_threshold", 0.3)
+                vertical_ratio=merge_vertical_ratio,
+                horizontal_ratio=merge_horizontal_ratio,
+                width_ratio_threshold=merge_width_ratio_threshold
             )
 
             if self.is_cancelled:

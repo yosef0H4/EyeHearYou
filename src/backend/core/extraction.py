@@ -78,14 +78,17 @@ def extract_text_from_regions(full_image, config, on_text_found=None):
 
     # Get text detection settings from config
     text_detection_config = config.get("text_detection", {})
-    min_width = text_detection_config.get("min_width", 30)
-    min_height = text_detection_config.get("min_height", 30)
+    # Use adaptive parameters only
+    min_width_ratio = text_detection_config.get("min_width_ratio", 0.0)
+    min_height_ratio = text_detection_config.get("min_height_ratio", 0.0)
+    median_height_fraction = text_detection_config.get("median_height_fraction", 0.4)
     
     # Try to detect text regions first
     # Note: min_confidence is not used since RapidOCR doesn't provide confidence scores in detection-only mode
     text_regions = detect_text_regions(full_image, 
-                                      min_width=min_width,
-                                      min_height=min_height)
+                                      min_width_ratio=min_width_ratio,
+                                      min_height_ratio=min_height_ratio,
+                                      median_height_fraction=median_height_fraction)
     
     if task_manager.is_cancelled():
         return None
@@ -106,13 +109,15 @@ def extract_text_from_regions(full_image, config, on_text_found=None):
     task_manager.emit_status(f"Merging {len(text_regions)} regions...", progress=20)
     
     # Merge close text boxes (like split dialogue lines)
-    merge_vertical_tolerance = text_detection_config.get("merge_vertical_tolerance", 4)
-    merge_horizontal_tolerance = text_detection_config.get("merge_horizontal_tolerance", 50)
+    # Use adaptive ratios only
+    merge_vertical_ratio = text_detection_config.get("merge_vertical_ratio", 0.5)
+    merge_horizontal_ratio = text_detection_config.get("merge_horizontal_ratio", 1.5)
     merge_width_ratio_threshold = text_detection_config.get("merge_width_ratio_threshold", 0.3)
+    
     text_regions, is_merged, _ = merge_close_text_boxes(
         text_regions,
-        vertical_tolerance=merge_vertical_tolerance,
-        horizontal_tolerance=merge_horizontal_tolerance,
+        vertical_ratio=merge_vertical_ratio,
+        horizontal_ratio=merge_horizontal_ratio,
         width_ratio_threshold=merge_width_ratio_threshold
     )
     print(f"After merging close boxes: {len(text_regions)} text region(s)")

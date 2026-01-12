@@ -78,10 +78,10 @@ The application creates a `config.json` file automatically. You can edit this fi
         "brightness": 0
     },
     "text_detection": {
-        "min_width": 30,
-        "min_height": 30,
-        "merge_vertical_tolerance": 4,
-        "merge_horizontal_tolerance": 50,
+        "min_height_ratio": 0.01,
+        "median_height_fraction": 0.4,
+        "merge_vertical_ratio": 0.5,
+        "merge_horizontal_ratio": 1.5,
         "merge_width_ratio_threshold": 0.3
     },
     "tts": {
@@ -94,7 +94,12 @@ The application creates a `config.json` file automatically. You can edit this fi
 ### Settings Guide:
 - **max_image_dimension**: Downscales large images to fit model context (default: 1080)
 - **preprocessing**: Image adjustments before detection (useful for difficult backgrounds)
-- **text_detection**: Controls how text is detected and merged into lines
+- **text_detection**: Controls how text is detected and merged into lines (uses adaptive ratios that work across all screen sizes)
+  - **min_height_ratio**: Minimum height as fraction of screen height (default: 0.01 = 1%)
+  - **median_height_fraction**: Discard boxes smaller than this fraction of median text size (default: 0.4 = 40%, removes noise)
+  - **merge_vertical_ratio**: Vertical gap multiplier for merging lines (default: 0.5 = half a line height)
+  - **merge_horizontal_ratio**: Horizontal gap multiplier for merging words (default: 1.5 = 1.5x line height)
+  - **merge_width_ratio_threshold**: Minimum horizontal overlap for vertical merging (default: 0.3)
 - **tts**: Text-to-Speech settings (TTS is always enabled)
   - **voice**: Kokoro voice ID (default: "af_heart")
   - **speed**: Speech speed multiplier (default: 1.0, range: 0.5-2.0)

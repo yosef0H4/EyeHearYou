@@ -38,6 +38,46 @@ def load_config():
                         # Save updated config
                         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
                             json.dump(config, f, indent=4)
+                # Ensure adaptive parameters exist (remove legacy pixel-based ones)
+                if "text_detection" in config:
+                    td = config["text_detection"]
+                    updated = False
+                    
+                    # Remove legacy pixel-based parameters
+                    if "min_width" in td:
+                        del td["min_width"]
+                        updated = True
+                    if "min_height" in td:
+                        del td["min_height"]
+                        updated = True
+                    if "merge_vertical_tolerance" in td:
+                        del td["merge_vertical_tolerance"]
+                        updated = True
+                    if "merge_horizontal_tolerance" in td:
+                        del td["merge_horizontal_tolerance"]
+                        updated = True
+                    
+                    # Add adaptive parameters if missing
+                    if "min_height_ratio" not in td:
+                        td["min_height_ratio"] = 0.01
+                        updated = True
+                    if "min_width_ratio" not in td:
+                        td["min_width_ratio"] = 0.0
+                        updated = True
+                    if "median_height_fraction" not in td:
+                        td["median_height_fraction"] = 0.4
+                        updated = True
+                    if "merge_vertical_ratio" not in td:
+                        td["merge_vertical_ratio"] = 0.5
+                        updated = True
+                    if "merge_horizontal_ratio" not in td:
+                        td["merge_horizontal_ratio"] = 1.5
+                        updated = True
+                    
+                    if updated:
+                        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+                            json.dump(config, f, indent=4)
+                
                 return config
         except json.JSONDecodeError:
             print("Error: config.json is not valid JSON")
@@ -59,10 +99,12 @@ def load_config():
                 "speed": 1.0              # 0.5 - 2.0
             },
             "text_detection": {
-                "min_width": 30,
-                "min_height": 30,
-                "merge_vertical_tolerance": 4,
-                "merge_horizontal_tolerance": 50,
+                # Adaptive parameters (works across all screen sizes and font sizes)
+                "min_height_ratio": 0.01,       # Box must be at least 1% of screen height
+                "min_width_ratio": 0.0,          # Minimum width as fraction of screen width (0.0 = disabled)
+                "median_height_fraction": 0.4,   # Discard if < 40% of median text size (removes noise)
+                "merge_vertical_ratio": 0.5,     # Merge lines if gap < 0.5x text height
+                "merge_horizontal_ratio": 1.5,  # Merge words if gap < 1.5x text height
                 "merge_width_ratio_threshold": 0.3
             },
             "text_sorting": {

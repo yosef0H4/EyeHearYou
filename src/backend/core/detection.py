@@ -57,7 +57,7 @@ def preload_rapidocr(test=True):
         return False
 
 
-def detect_text_regions(image, min_width=30, min_height=30):
+def detect_text_regions(image, min_width_ratio=0.0, min_height_ratio=0.0, median_height_fraction=0.4):
     """
     Detect text regions in the image using RapidOCR (detection only).
     Returns a list of bounding boxes as (x1, y1, x2, y2) tuples.
@@ -67,8 +67,9 @@ def detect_text_regions(image, min_width=30, min_height=30):
     
     Args:
         image: PIL Image to process
-        min_width: Minimum width of text region in pixels. Default: 30
-        min_height: Minimum height of text region in pixels. Default: 30
+        min_width_ratio: Minimum width as fraction of image width (e.g., 0.01 for 1%)
+        min_height_ratio: Minimum height as fraction of image height
+        median_height_fraction: If a box is smaller than (median_height * this_fraction), discard it
     
     Returns:
         List of (x1, y1, x2, y2) tuples representing bounding boxes
@@ -110,9 +111,11 @@ def detect_text_regions(image, min_width=30, min_height=30):
                 if x2 > x1 and y2 > y1:
                     text_regions.append((x1, y1, x2, y2))
     
-    # Filter out small regions (UI elements, icons, etc.)
+    # Filter out small regions using adaptive logic
     text_regions = filter_text_regions(text_regions, (img_height, img_width), 
-                                      min_width=min_width, min_height=min_height)
+                                      min_width_ratio=min_width_ratio,
+                                      min_height_ratio=min_height_ratio,
+                                      median_height_fraction=median_height_fraction)
     
     # Sort regions by reading order (top-to-bottom, left-to-right for English)
     # Note: This is a fallback sort, the main sorting happens in worker.py with config

@@ -118,47 +118,78 @@ def sort_text_regions_by_reading_order(text_regions, direction='horizontal_ltr',
     return text_regions
 
 
-def filter_text_regions(text_regions, image_shape, min_width=30, min_height=30):
+def filter_text_regions(text_regions, image_shape, min_width_ratio=0.0, min_height_ratio=0.0, median_height_fraction=0.4):
     """
-    Filter out small text regions that are likely UI elements, icons, or noise.
-    Similar to comic-translate's filter_and_fix_bboxes but with larger thresholds.
+    Filter regions based on relative size and statistical outliers.
+    Uses adaptive logic that works across different screen sizes and font sizes.
     
     Args:
         text_regions: List of (x1, y1, x2, y2) bounding boxes
         image_shape: Tuple (height, width) of the image
-        min_width: Minimum width in pixels to keep (default: 30)
-        min_height: Minimum height in pixels to keep (default: 30)
+        min_width_ratio: Minimum width as fraction of image width (e.g., 0.01 for 1%)
+        min_height_ratio: Minimum height as fraction of image height
+        median_height_fraction: If a box is smaller than (median_height * this_fraction), discard it.
+                                Default 0.4 means "discard if smaller than 40% of average text size"
     
     Returns:
         Filtered list of bounding boxes
     """
     if not text_regions:
         return []
-    
+
     img_h, img_w = image_shape[:2]
-    filtered = []
     
-    for x1, y1, x2, y2 in text_regions:
+    # 1. Calculate dimensions for all boxes
+    valid_regions = []
+    heights = []
+    
+    for box in text_regions:
+        x1, y1, x2, y2 = box
+        
         # Clamp coordinates to image bounds
         x1 = max(0, min(x1, img_w))
         x2 = max(0, min(x2, img_w))
         y1 = max(0, min(y1, img_h))
         y2 = max(0, min(y2, img_h))
         
-        # Calculate dimensions
         w = x2 - x1
         h = y2 - y1
         
-        # Filter out invalid or too small regions
+        # Basic sanity check
         if w <= 0 or h <= 0:
             continue
         
-        # Filter by minimum size (width and height)
-        if w <= min_width or h <= min_height:
-            continue
-        
-        filtered.append((x1, y1, x2, y2))
+        heights.append(h)
+        valid_regions.append((x1, y1, x2, y2))
+
+    if not valid_regions:
+        return []
+
+    # 2. Calculate Statistical Median Height
+    # This tells us how big the "normal" text is on this specific screen
+    median_h = np.median(heights) if heights else 0
     
+    filtered = []
+    for x1, y1, x2, y2 in valid_regions:
+        w = x2 - x1
+        h = y2 - y1
+        
+        # A. Filter by Image Ratio (e.g., "Must be at least 1% of screen height")
+        # Good for removing tiny specks regardless of content
+        if min_height_ratio > 0 and h < (img_h * min_height_ratio):
+            continue
+        if min_width_ratio > 0 and w < (img_w * min_width_ratio):
+            continue
+            
+        # B. Filter by Content Statistics (The "Smart" Filter)
+        # If this box is tiny compared to the median text size, it's noise.
+        # Exception: Punctuation (., " -) might be small, but usually RapidOCR groups them with text.
+        # We allow small boxes if they are very wide (like a horizontal line/separator)
+        if median_h > 0 and h < (median_h * median_height_fraction) and w < (median_h * 2):
+            continue
+            
+        filtered.append((x1, y1, x2, y2))
+        
     return filtered
 
 
