@@ -59,3 +59,4 @@ export interface ScreenshotEvent {
     height: number;
 }
 
+

@@ -93,7 +93,7 @@ Edit `config.json` to set your API settings:
 The web UI provides a visual interface to tweak OCR settings with live preview:
 
 ```bash
-uv run python server.py
+uv run python run_server.py
 ```
 
 Then open your browser to: `http://localhost:8000`
@@ -112,10 +112,16 @@ Then open your browser to: `http://localhost:8000`
 
 ### Option 2: Command Line (Hotkey Mode)
 
-Run the application:
+Run the standalone CLI:
 
 ```bash
-uv run python main.py
+uv run python -m src.backend.cli
+```
+
+Or use the convenience script (if you create one):
+
+```bash
+uv run python run_cli.py
 ```
 
 The application will:
@@ -149,7 +155,7 @@ Press `Ctrl+C` to exit.
 - Ensure the model supports vision capabilities
 
 ### Import errors
-- Make sure you're using the virtual environment: `uv run python main.py`
+- Make sure you're using the virtual environment: `uv run python run_server.py` or `uv run python run_cli.py`
 - Or activate the venv: `.venv\Scripts\activate` (Windows) or `source .venv/bin/activate` (Linux/Mac)
 
 ### PaddleOCR GPU issues

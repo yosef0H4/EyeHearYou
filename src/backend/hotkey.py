@@ -1,12 +1,7 @@
 """Keyboard hotkey management"""
 import threading
-import sys
-from pathlib import Path
 
-# Add parent directory to path to import main
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
-import main as ocr_app
+from .core.capture import capture_screenshot
 from .state import state
 
 
@@ -22,7 +17,7 @@ except ImportError:
 def capture_and_update_state():
     """Capture screenshot and update global state (called by hotkey)"""
     try:
-        screenshot = ocr_app.capture_screenshot()
+        screenshot = capture_screenshot()
         if screenshot:
             state.last_image = screenshot
             state.reset_detections()

@@ -1,13 +1,9 @@
 """Text extraction routes"""
-import sys
 import traceback
-from pathlib import Path
 from fastapi import Request
 
-# Add parent directory to path to import main
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
-
-import main as ocr_app
+from ..core.config import load_config
+from ..core.extraction import extract_text_from_regions
 from ..state import state
 
 
@@ -18,10 +14,10 @@ async def run_extraction(request: Request):
     
     try:
         # Reload config to ensure we use latest settings
-        config = ocr_app.load_config()
+        config = load_config()
         
         # Run the full extraction pipeline
-        text = ocr_app.extract_text_from_regions(state.last_image, config)
+        text = extract_text_from_regions(state.last_image, config)
         
         if text:
             return {"status": "success", "text": text}

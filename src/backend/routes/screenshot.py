@@ -1,15 +1,9 @@
 """Screenshot routes"""
 import asyncio
 import json
-import sys
-from pathlib import Path
-
 from fastapi.responses import StreamingResponse
 
-# Add parent directory to path to import main
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
-
-import main as ocr_app
+from ..core.image_utils import image_to_base64
 from ..state import state
 from ..hotkey import capture_and_update_state
 
@@ -19,7 +13,7 @@ async def capture():
     try:
         if capture_and_update_state():
             # Convert to base64
-            image_b64 = ocr_app.image_to_base64(state.last_image)
+            image_b64 = image_to_base64(state.last_image)
             
             return {
                 "status": "success", 
@@ -39,7 +33,7 @@ async def get_screenshot():
         return {"status": "error", "message": "No screenshot available"}
     
     try:
-        image_b64 = ocr_app.image_to_base64(state.last_image)
+        image_b64 = image_to_base64(state.last_image)
         return {
             "status": "success",
             "image": image_b64,

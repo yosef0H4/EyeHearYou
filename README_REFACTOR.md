@@ -76,3 +76,4 @@ The frontend is in TypeScript. To compile:
 - All routes are properly separated by functionality
 - State management is centralized in `state.py`
 
+

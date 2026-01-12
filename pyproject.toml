@@ -9,14 +9,17 @@ dependencies = [
     "numpy>=1.24.0",
     "opencv-python>=4.8.0",
     "openai>=2.15.0",
-    "paddleocr>=2.7.0",
     "pillow>=12.1.0",
     "pygetwindow>=0.0.9",
     "streamlit>=1.52.2",
     "uvicorn>=0.24.0",
 ]
 
-# Note: For GPU support with PaddleOCR, install paddlepaddle-gpu==2.6.2 separately:
+# Note: PaddleOCR is NOT included in dependencies to avoid conflicts with paddlepaddle-gpu.
+# If paddleocr is listed here, package managers will install paddlepaddle (CPU version),
+# which will replace paddlepaddle-gpu if it's already installed.
+#
+# For GPU support with PaddleOCR, install paddlepaddle-gpu==2.6.2 separately FIRST:
 # 
 # Check your CUDA version first: nvidia-smi
 # 
@@ -36,5 +39,12 @@ dependencies = [
 # 
 # After installing paddlepaddle-gpu, install PaddleOCR:
 #   pip install paddleocr
-# 
+#
+# IMPORTANT: Install paddlepaddle-gpu BEFORE paddleocr to ensure the GPU version
+# is used. If you install paddleocr first, it will pull in paddlepaddle (CPU) as
+# a dependency, which will conflict with paddlepaddle-gpu.
+#
+# The application gracefully handles missing PaddleOCR - it will process the full
+# image instead of detecting text regions if PaddleOCR is not installed.
+#
 # See README.md for detailed installation instructions

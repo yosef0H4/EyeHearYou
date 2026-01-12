@@ -1,13 +1,9 @@
 """Text detection routes"""
-import sys
 import traceback
-from pathlib import Path
 from fastapi import Request
 
-# Add parent directory to path to import main
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent))
-
-import main as ocr_app
+from ..core.detection import detect_text_regions_unfiltered
+from ..core.filtering import filter_text_regions
 from ..state import state
 
 
@@ -27,7 +23,7 @@ async def detect_preview(request: Request):
         
         # Run detection but return unfiltered detections (after confidence, before size filtering)
         # This allows the frontend to do size filtering live
-        unfiltered_regions = ocr_app.detect_text_regions_unfiltered(
+        unfiltered_regions = detect_text_regions_unfiltered(
             state.last_image,
             min_confidence=float(settings.get("min_confidence", 0.6))
         )
@@ -40,7 +36,7 @@ async def detect_preview(request: Request):
             min_width = int(settings.get("min_width", 30))
             min_height = int(settings.get("min_height", 30))
             img_height, img_width = state.last_image.size[1], state.last_image.size[0]
-            filtered = ocr_app.filter_text_regions(unfiltered_regions, (img_height, img_width), 
+            filtered = filter_text_regions(unfiltered_regions, (img_height, img_width), 
                                                    min_width=min_width, min_height=min_height)
             state.last_detections = filtered
         else:
