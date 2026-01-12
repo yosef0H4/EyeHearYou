@@ -45,7 +45,7 @@ def load_config():
             },
             "text_sorting": {
                 "direction": "horizontal_ltr",  # Options: horizontal_ltr, horizontal_rtl, vertical_ltr, vertical_rtl
-                "group_tolerance": 0.5          # Multiplier for line/column grouping (0.1-2.0)
+                "group_tolerance": 0.8          # Multiplier for line/column grouping (0.1-2.0)
             }
         }
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:

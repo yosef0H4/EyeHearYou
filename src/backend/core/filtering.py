@@ -2,7 +2,7 @@
 import numpy as np
 
 
-def sort_text_regions_by_reading_order(text_regions, direction='horizontal_ltr', group_tolerance=0.5):
+def sort_text_regions_by_reading_order(text_regions, direction='horizontal_ltr', group_tolerance=0.8):
     """
     Sort text regions by reading order with configurable direction.
     
@@ -15,7 +15,7 @@ def sort_text_regions_by_reading_order(text_regions, direction='horizontal_ltr',
             'vertical_rtl'   (Top-Bottom, Right-Left) - Vertical text (Columns RTL)
             'ltr' (legacy) - Same as 'horizontal_ltr'
             'rtl' (legacy) - Same as 'horizontal_rtl'
-        group_tolerance: Ratio of median height/width to group items (default: 0.5)
+        group_tolerance: Ratio of median height/width to group items (default: 0.8)
     
     Returns:
         Sorted list of bounding boxes in reading order

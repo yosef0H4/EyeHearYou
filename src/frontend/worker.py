@@ -96,10 +96,10 @@ class OCRWorker(QThread):
                 # Fallback to legacy reading_direction
                 legacy_dir = self.config.get("reading_direction", "ltr")
                 direction = "horizontal_ltr" if legacy_dir == "ltr" else "horizontal_rtl"
-                group_tol = 0.5
+                group_tol = 0.8
             else:
                 direction = sort_config.get("direction", "horizontal_ltr")
-                group_tol = sort_config.get("group_tolerance", 0.5)
+                group_tol = sort_config.get("group_tolerance", 0.8)
             
             # Step 3: Sort by reading order (Initial sort)
             regions = sort_text_regions_by_reading_order(

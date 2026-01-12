@@ -6,7 +6,7 @@ from typing import Optional, List, Tuple
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QSlider, QGroupBox, QPushButton, QTextEdit, QProgressBar,
-    QGraphicsView, QGraphicsScene, QSplitter, QLineEdit, QSpinBox,
+    QGraphicsView, QGraphicsScene, QSplitter, QLineEdit, QSpinBox, QDoubleSpinBox,
     QGraphicsTextItem, QGraphicsPixmapItem, QScrollArea, QComboBox, QFrame
 )
 from PyQt6.QtCore import Qt, QTimer, QRect, QEvent
@@ -201,62 +201,129 @@ class OCRWindow(QMainWindow):
         # 2. Binary Threshold (0 = Disabled)
         thresh_layout = QHBoxLayout()
         thresh_label = QLabel("Binary Threshold:")
-        self.thresh_val = QLabel(str(pp_config.get("binary_threshold", 0)))
-        self.thresh_val.setMinimumWidth(30)
         
         thresh_slider = QSlider(Qt.Orientation.Horizontal)
         thresh_slider.setRange(0, 255)
         thresh_slider.setValue(pp_config.get("binary_threshold", 0))
         
-        thresh_slider.valueChanged.connect(
-            lambda v: self.update_pp_slider("binary_threshold", v, self.thresh_val)
-        )
+        thresh_spin = QSpinBox()
+        thresh_spin.setMinimum(0)
+        thresh_spin.setMaximum(255)
+        thresh_spin.setValue(pp_config.get("binary_threshold", 0))
+        thresh_spin.setMaximumWidth(80)
+        
+        def on_thresh_slider_change(v):
+            if "preprocessing" not in self.config:
+                self.config["preprocessing"] = {}
+            self.config["preprocessing"]["binary_threshold"] = v
+            thresh_spin.blockSignals(True)
+            thresh_spin.setValue(v)
+            thresh_spin.blockSignals(False)
+        
+        def on_thresh_spin_change(v):
+            thresh_slider.blockSignals(True)
+            thresh_slider.setValue(v)
+            thresh_slider.blockSignals(False)
+            if "preprocessing" not in self.config:
+                self.config["preprocessing"] = {}
+            self.config["preprocessing"]["binary_threshold"] = v
+            self.save_and_refresh()
+        
+        thresh_slider.valueChanged.connect(on_thresh_slider_change)
         thresh_slider.sliderReleased.connect(self.save_and_refresh)
+        thresh_spin.valueChanged.connect(on_thresh_spin_change)
+        thresh_spin.editingFinished.connect(self.save_and_refresh)
         
         thresh_layout.addWidget(thresh_label)
         thresh_layout.addWidget(thresh_slider)
-        thresh_layout.addWidget(self.thresh_val)
+        thresh_layout.addWidget(thresh_spin)
         g_layout.addLayout(thresh_layout)
         g_layout.addWidget(QLabel("(0 = Disabled). Helps separate text from background."))
 
         # 3. Contrast (1.0 = Normal)
         cont_layout = QHBoxLayout()
         cont_label = QLabel("Contrast:")
-        self.cont_val = QLabel(f"{pp_config.get('contrast', 1.0):.1f}")
-        self.cont_val.setMinimumWidth(30)
         
         cont_slider = QSlider(Qt.Orientation.Horizontal)
         cont_slider.setRange(5, 30) # 0.5 to 3.0
         cont_slider.setValue(int(pp_config.get("contrast", 1.0) * 10))
         
-        cont_slider.valueChanged.connect(
-            lambda v: self.update_pp_slider("contrast", v/10.0, self.cont_val, "{:.1f}")
-        )
+        cont_spin = QDoubleSpinBox()
+        cont_spin.setMinimum(0.5)
+        cont_spin.setMaximum(3.0)
+        cont_spin.setSingleStep(0.1)
+        cont_spin.setDecimals(1)
+        cont_spin.setValue(pp_config.get("contrast", 1.0))
+        cont_spin.setMaximumWidth(80)
+        
+        def on_cont_slider_change(v):
+            val = v / 10.0
+            if "preprocessing" not in self.config:
+                self.config["preprocessing"] = {}
+            self.config["preprocessing"]["contrast"] = val
+            cont_spin.blockSignals(True)
+            cont_spin.setValue(val)
+            cont_spin.blockSignals(False)
+        
+        def on_cont_spin_change(v):
+            slider_val = int(v * 10)
+            cont_slider.blockSignals(True)
+            cont_slider.setValue(slider_val)
+            cont_slider.blockSignals(False)
+            if "preprocessing" not in self.config:
+                self.config["preprocessing"] = {}
+            self.config["preprocessing"]["contrast"] = v
+            self.save_and_refresh()
+        
+        cont_slider.valueChanged.connect(on_cont_slider_change)
         cont_slider.sliderReleased.connect(self.save_and_refresh)
+        cont_spin.valueChanged.connect(on_cont_spin_change)
+        cont_spin.editingFinished.connect(self.save_and_refresh)
         
         cont_layout.addWidget(cont_label)
         cont_layout.addWidget(cont_slider)
-        cont_layout.addWidget(self.cont_val)
+        cont_layout.addWidget(cont_spin)
         g_layout.addLayout(cont_layout)
 
         # 4. Brightness
         bright_layout = QHBoxLayout()
         bright_label = QLabel("Brightness:")
-        self.bright_val = QLabel(str(pp_config.get("brightness", 0)))
-        self.bright_val.setMinimumWidth(30)
         
         bright_slider = QSlider(Qt.Orientation.Horizontal)
         bright_slider.setRange(-100, 100)
         bright_slider.setValue(pp_config.get("brightness", 0))
         
-        bright_slider.valueChanged.connect(
-            lambda v: self.update_pp_slider("brightness", v, self.bright_val)
-        )
+        bright_spin = QSpinBox()
+        bright_spin.setMinimum(-100)
+        bright_spin.setMaximum(100)
+        bright_spin.setValue(pp_config.get("brightness", 0))
+        bright_spin.setMaximumWidth(80)
+        
+        def on_bright_slider_change(v):
+            if "preprocessing" not in self.config:
+                self.config["preprocessing"] = {}
+            self.config["preprocessing"]["brightness"] = v
+            bright_spin.blockSignals(True)
+            bright_spin.setValue(v)
+            bright_spin.blockSignals(False)
+        
+        def on_bright_spin_change(v):
+            bright_slider.blockSignals(True)
+            bright_slider.setValue(v)
+            bright_slider.blockSignals(False)
+            if "preprocessing" not in self.config:
+                self.config["preprocessing"] = {}
+            self.config["preprocessing"]["brightness"] = v
+            self.save_and_refresh()
+        
+        bright_slider.valueChanged.connect(on_bright_slider_change)
         bright_slider.sliderReleased.connect(self.save_and_refresh)
+        bright_spin.valueChanged.connect(on_bright_spin_change)
+        bright_spin.editingFinished.connect(self.save_and_refresh)
         
         bright_layout.addWidget(bright_label)
         bright_layout.addWidget(bright_slider)
-        bright_layout.addWidget(self.bright_val)
+        bright_layout.addWidget(bright_spin)
         g_layout.addLayout(bright_layout)
 
         # 5. Dilation
@@ -305,8 +372,8 @@ class OCRWindow(QMainWindow):
         dim_label = QLabel("Max Dimension:")
         
         current_dim = self.config.get("max_image_dimension", 1080)
-        self.dim_val_label = QLabel(f"{current_dim}px")
-        self.dim_val_label.setMinimumWidth(50)
+        self.dim_val_label = QLabel("px")
+        self.dim_val_label.setMinimumWidth(30)
         self.dim_val_label.setStyleSheet("color: #aaa; font-weight: 600;")
         
         dim_slider = QSlider(Qt.Orientation.Horizontal)
@@ -322,7 +389,7 @@ class OCRWindow(QMainWindow):
 
         def on_dim_change(v):
             """Update label and visualizer when dimension changes"""
-            self.dim_val_label.setText(f"{v}px")
+            self.dim_val_label.setText("px")
             self.config["max_image_dimension"] = v
             self.resize_viz.update_value(v)
             
@@ -405,10 +472,7 @@ class OCRWindow(QMainWindow):
 
         # Min Width
         width_layout = QHBoxLayout()
-        width_label_text = QLabel("Min Width (px):")
-        self.width_label = QLabel(str(td_config.get("min_width", 30)))
-        self.width_label.setMinimumWidth(50)
-        self.width_label.setStyleSheet("color: #aaa; font-weight: 600;")
+        width_label_text = QLabel("Min Width:")
         width_slider = QSlider(Qt.Orientation.Horizontal)
         width_slider.setMinimum(5)
         width_slider.setMaximum(300)
@@ -418,9 +482,12 @@ class OCRWindow(QMainWindow):
         width_spin.setMaximum(1000)  # Allow higher values than slider
         width_spin.setValue(td_config.get("min_width", 30))
         width_spin.setMaximumWidth(80)
+        width_spin.setSuffix(" px")
         
         def on_width_slider_change(v):
-            self.on_slider_change("min_width", v, self.width_label, "{:.0f}")
+            if "text_detection" not in self.config:
+                self.config["text_detection"] = {}
+            self.config["text_detection"]["min_width"] = v
             width_spin.blockSignals(True)
             width_spin.setValue(v)
             width_spin.blockSignals(False)
@@ -431,8 +498,11 @@ class OCRWindow(QMainWindow):
             width_slider.blockSignals(True)
             width_slider.setValue(clamped)
             width_slider.blockSignals(False)
-            self.on_slider_change("min_width", v, self.width_label, "{:.0f}")
+            if "text_detection" not in self.config:
+                self.config["text_detection"] = {}
+            self.config["text_detection"]["min_width"] = v
             self.update_detection_viz()
+            self.save_and_refresh()
         
         width_slider.valueChanged.connect(on_width_slider_change)
         width_slider.sliderReleased.connect(self.save_and_refresh)
@@ -442,15 +512,11 @@ class OCRWindow(QMainWindow):
         width_layout.addWidget(width_label_text)
         width_layout.addWidget(width_slider)
         width_layout.addWidget(width_spin)
-        width_layout.addWidget(self.width_label)
         g_layout.addLayout(width_layout)
 
         # Min Height
         height_layout = QHBoxLayout()
-        height_label_text = QLabel("Min Height (px):")
-        self.height_label = QLabel(str(td_config.get("min_height", 30)))
-        self.height_label.setMinimumWidth(50)
-        self.height_label.setStyleSheet("color: #aaa; font-weight: 600;")
+        height_label_text = QLabel("Min Height:")
         height_slider = QSlider(Qt.Orientation.Horizontal)
         height_slider.setMinimum(5)
         height_slider.setMaximum(300)
@@ -460,9 +526,12 @@ class OCRWindow(QMainWindow):
         height_spin.setMaximum(1000)
         height_spin.setValue(td_config.get("min_height", 30))
         height_spin.setMaximumWidth(80)
+        height_spin.setSuffix(" px")
         
         def on_height_slider_change(v):
-            self.on_slider_change("min_height", v, self.height_label, "{:.0f}")
+            if "text_detection" not in self.config:
+                self.config["text_detection"] = {}
+            self.config["text_detection"]["min_height"] = v
             height_spin.blockSignals(True)
             height_spin.setValue(v)
             height_spin.blockSignals(False)
@@ -473,8 +542,11 @@ class OCRWindow(QMainWindow):
             height_slider.blockSignals(True)
             height_slider.setValue(clamped)
             height_slider.blockSignals(False)
-            self.on_slider_change("min_height", v, self.height_label, "{:.0f}")
+            if "text_detection" not in self.config:
+                self.config["text_detection"] = {}
+            self.config["text_detection"]["min_height"] = v
             self.update_detection_viz()
+            self.save_and_refresh()
         
         height_slider.valueChanged.connect(on_height_slider_change)
         height_slider.sliderReleased.connect(self.save_and_refresh)
@@ -484,7 +556,6 @@ class OCRWindow(QMainWindow):
         height_layout.addWidget(height_label_text)
         height_layout.addWidget(height_slider)
         height_layout.addWidget(height_spin)
-        height_layout.addWidget(self.height_label)
         g_layout.addLayout(height_layout)
 
         # Store references for later updates
@@ -514,7 +585,7 @@ class OCRWindow(QMainWindow):
             # Migrate from legacy reading_direction
             legacy_dir = self.config.get("reading_direction", "ltr")
             self.config["text_sorting"]["direction"] = "horizontal_ltr" if legacy_dir == "ltr" else "horizontal_rtl"
-            self.config["text_sorting"]["group_tolerance"] = 0.5
+            self.config["text_sorting"]["group_tolerance"] = 0.8
             sort_config = self.config["text_sorting"]
         
         order_layout = QHBoxLayout()
@@ -541,25 +612,20 @@ class OCRWindow(QMainWindow):
         # Grouping Tolerance Control
         grp_layout = QHBoxLayout()
         grp_label = QLabel("Line Grouping:")
-        self.grp_val_label = QLabel(f"{sort_config.get('group_tolerance', 0.5):.2f}")
-        self.grp_val_label.setMinimumWidth(50)
-        self.grp_val_label.setStyleSheet("color: #aaa; font-weight: 600;")
-        
         grp_slider = QSlider(Qt.Orientation.Horizontal)
         grp_slider.setMinimum(1)   # 0.1
         grp_slider.setMaximum(20)  # 2.0
-        grp_slider.setValue(int(sort_config.get("group_tolerance", 0.5) * 10))
+        grp_slider.setValue(int(sort_config.get("group_tolerance", 0.8) * 10))
         
         grp_spin = QSpinBox()
         grp_spin.setMinimum(1)
         grp_spin.setMaximum(20)
-        grp_spin.setValue(int(sort_config.get("group_tolerance", 0.5) * 10))
+        grp_spin.setValue(int(sort_config.get("group_tolerance", 0.8) * 10))
         grp_spin.setMaximumWidth(80)
         grp_spin.setSuffix(" (×0.1)")
         
         def on_grp_slider_change(v):
             val = v / 10.0
-            self.grp_val_label.setText(f"{val:.2f}")
             grp_spin.blockSignals(True)
             grp_spin.setValue(v)
             grp_spin.blockSignals(False)
@@ -573,10 +639,10 @@ class OCRWindow(QMainWindow):
             grp_slider.setValue(clamped)
             grp_slider.blockSignals(False)
             val = clamped / 10.0
-            self.grp_val_label.setText(f"{val:.2f}")
             if "text_sorting" not in self.config:
                 self.config["text_sorting"] = {}
             self.config["text_sorting"]["group_tolerance"] = val
+            self.save_and_refresh()
         
         grp_slider.valueChanged.connect(on_grp_slider_change)
         grp_slider.sliderReleased.connect(self.save_and_refresh)
@@ -586,7 +652,6 @@ class OCRWindow(QMainWindow):
         grp_layout.addWidget(grp_label)
         grp_layout.addWidget(grp_slider)
         grp_layout.addWidget(grp_spin)
-        grp_layout.addWidget(self.grp_val_label)
         g_layout.addLayout(grp_layout)
         
         info_grp = QLabel("Controls how strictly boxes must align to be in the same row/column. Lower = stricter grouping.")
@@ -610,9 +675,6 @@ class OCRWindow(QMainWindow):
         # Vertical Tolerance
         vtol_layout = QHBoxLayout()
         vtol_label_text = QLabel("Vertical Tolerance:")
-        self.vtol_label = QLabel(str(td_config.get("merge_vertical_tolerance", 30)))
-        self.vtol_label.setMinimumWidth(50)
-        self.vtol_label.setStyleSheet("color: #aaa; font-weight: 600;")
         vtol_slider = QSlider(Qt.Orientation.Horizontal)
         vtol_slider.setMinimum(0)
         vtol_slider.setMaximum(300)
@@ -622,9 +684,12 @@ class OCRWindow(QMainWindow):
         vtol_spin.setMaximum(1000)
         vtol_spin.setValue(td_config.get("merge_vertical_tolerance", 30))
         vtol_spin.setMaximumWidth(80)
+        vtol_spin.setSuffix(" px")
         
         def on_vtol_slider_change(v):
-            self.on_slider_change("merge_vertical_tolerance", v, self.vtol_label, "{:.0f}")
+            if "text_detection" not in self.config:
+                self.config["text_detection"] = {}
+            self.config["text_detection"]["merge_vertical_tolerance"] = v
             vtol_spin.blockSignals(True)
             vtol_spin.setValue(v)
             vtol_spin.blockSignals(False)
@@ -635,8 +700,11 @@ class OCRWindow(QMainWindow):
             vtol_slider.blockSignals(True)
             vtol_slider.setValue(clamped)
             vtol_slider.blockSignals(False)
-            self.on_slider_change("merge_vertical_tolerance", v, self.vtol_label, "{:.0f}")
+            if "text_detection" not in self.config:
+                self.config["text_detection"] = {}
+            self.config["text_detection"]["merge_vertical_tolerance"] = v
             self.update_merge_viz()
+            self.save_and_refresh()
         
         vtol_slider.valueChanged.connect(on_vtol_slider_change)
         vtol_slider.sliderReleased.connect(self.save_and_refresh)
@@ -646,7 +714,6 @@ class OCRWindow(QMainWindow):
         vtol_layout.addWidget(vtol_label_text)
         vtol_layout.addWidget(vtol_slider)
         vtol_layout.addWidget(vtol_spin)
-        vtol_layout.addWidget(self.vtol_label)
         g_layout.addLayout(vtol_layout)
         info_vtol = QLabel("Max vertical gap between boxes to merge (px)")
         info_vtol.setStyleSheet("font-size: 10px; color: #888; font-style: italic;")
@@ -656,9 +723,6 @@ class OCRWindow(QMainWindow):
         # Horizontal Tolerance
         htol_layout = QHBoxLayout()
         htol_label_text = QLabel("Horizontal Tolerance:")
-        self.htol_label = QLabel(str(td_config.get("merge_horizontal_tolerance", 50)))
-        self.htol_label.setMinimumWidth(50)
-        self.htol_label.setStyleSheet("color: #aaa; font-weight: 600;")
         htol_slider = QSlider(Qt.Orientation.Horizontal)
         htol_slider.setMinimum(0)
         htol_slider.setMaximum(300)
@@ -668,9 +732,12 @@ class OCRWindow(QMainWindow):
         htol_spin.setMaximum(1000)
         htol_spin.setValue(td_config.get("merge_horizontal_tolerance", 50))
         htol_spin.setMaximumWidth(80)
+        htol_spin.setSuffix(" px")
         
         def on_htol_slider_change(v):
-            self.on_slider_change("merge_horizontal_tolerance", v, self.htol_label, "{:.0f}")
+            if "text_detection" not in self.config:
+                self.config["text_detection"] = {}
+            self.config["text_detection"]["merge_horizontal_tolerance"] = v
             htol_spin.blockSignals(True)
             htol_spin.setValue(v)
             htol_spin.blockSignals(False)
@@ -681,8 +748,11 @@ class OCRWindow(QMainWindow):
             htol_slider.blockSignals(True)
             htol_slider.setValue(clamped)
             htol_slider.blockSignals(False)
-            self.on_slider_change("merge_horizontal_tolerance", v, self.htol_label, "{:.0f}")
+            if "text_detection" not in self.config:
+                self.config["text_detection"] = {}
+            self.config["text_detection"]["merge_horizontal_tolerance"] = v
             self.update_merge_viz()
+            self.save_and_refresh()
         
         htol_slider.valueChanged.connect(on_htol_slider_change)
         htol_slider.sliderReleased.connect(self.save_and_refresh)
@@ -692,7 +762,6 @@ class OCRWindow(QMainWindow):
         htol_layout.addWidget(htol_label_text)
         htol_layout.addWidget(htol_slider)
         htol_layout.addWidget(htol_spin)
-        htol_layout.addWidget(self.htol_label)
         g_layout.addLayout(htol_layout)
         info_htol = QLabel("Max horizontal offset to consider aligned (px)")
         info_htol.setStyleSheet("font-size: 10px; color: #888; font-style: italic;")
@@ -702,23 +771,48 @@ class OCRWindow(QMainWindow):
         # Width Ratio
         ratio_layout = QHBoxLayout()
         ratio_label_text = QLabel("Width Ratio Threshold:")
-        self.ratio_label = QLabel(f"{td_config.get('merge_width_ratio_threshold', 0.3):.2f}")
-        self.ratio_label.setMinimumWidth(50)
-        self.ratio_label.setStyleSheet("color: #aaa; font-weight: 600;")
         ratio_slider = QSlider(Qt.Orientation.Horizontal)
         ratio_slider.setMinimum(0)
         ratio_slider.setMaximum(100)
         ratio_slider.setValue(int(td_config.get("merge_width_ratio_threshold", 0.3) * 100))
-        def on_ratio_change(v):
-            val = v / 100.0
-            self.on_slider_change("merge_width_ratio_threshold", val, self.ratio_label, "{:.2f}")
-            self.update_merge_viz()  # Update visualizer when ratio changes
         
-        ratio_slider.valueChanged.connect(on_ratio_change)
+        ratio_spin = QDoubleSpinBox()
+        ratio_spin.setMinimum(0.0)
+        ratio_spin.setMaximum(1.0)
+        ratio_spin.setSingleStep(0.01)
+        ratio_spin.setDecimals(2)
+        ratio_spin.setValue(td_config.get("merge_width_ratio_threshold", 0.3))
+        ratio_spin.setMaximumWidth(80)
+        
+        def on_ratio_slider_change(v):
+            val = v / 100.0
+            if "text_detection" not in self.config:
+                self.config["text_detection"] = {}
+            self.config["text_detection"]["merge_width_ratio_threshold"] = val
+            ratio_spin.blockSignals(True)
+            ratio_spin.setValue(val)
+            ratio_spin.blockSignals(False)
+            self.update_merge_viz()
+        
+        def on_ratio_spin_change(v):
+            slider_val = int(v * 100)
+            ratio_slider.blockSignals(True)
+            ratio_slider.setValue(slider_val)
+            ratio_slider.blockSignals(False)
+            if "text_detection" not in self.config:
+                self.config["text_detection"] = {}
+            self.config["text_detection"]["merge_width_ratio_threshold"] = v
+            self.update_merge_viz()
+            self.save_and_refresh()
+        
+        ratio_slider.valueChanged.connect(on_ratio_slider_change)
         ratio_slider.sliderReleased.connect(self.save_and_refresh)
+        ratio_spin.valueChanged.connect(on_ratio_spin_change)
+        ratio_spin.editingFinished.connect(self.save_and_refresh)
+        
         ratio_layout.addWidget(ratio_label_text)
         ratio_layout.addWidget(ratio_slider)
-        ratio_layout.addWidget(self.ratio_label)
+        ratio_layout.addWidget(ratio_spin)
         g_layout.addLayout(ratio_layout)
         info_ratio = QLabel("Min width similarity ratio (0.0-1.0) to merge boxes")
         info_ratio.setStyleSheet("font-size: 10px; color: #888; font-style: italic;")
@@ -976,7 +1070,7 @@ class OCRWindow(QMainWindow):
         
         sort_config = self.config.get("text_sorting", {})
         direction = sort_config.get("direction", "horizontal_ltr")
-        group_tol = sort_config.get("group_tolerance", 0.5)
+        group_tol = sort_config.get("group_tolerance", 0.8)
         
         # 1. Draw Flow Path (Connecting centers with arrows)
         path_pen = QPen(QColor(255, 0, 255), 2)  # Magenta/Purple
