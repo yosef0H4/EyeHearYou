@@ -232,7 +232,7 @@ def detect_text_regions_unfiltered(image, min_confidence=0.6):
         detections_with_scores = list(zip(text_regions, confidence_scores))
         
         if detections_with_scores:
-            print(f"Detected {len(detections_with_scores)} text regions (with confidence scores)")
+            print(f"Detected {len(detections_with_scores)} raw text regions (unfiltered, will be filtered by confidence/size)")
         
         # Return as list of ((x1, y1, x2, y2), score) tuples
         return detections_with_scores
