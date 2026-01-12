@@ -97,6 +97,9 @@ class OCRWindow(QMainWindow):
         # 3. Text Processing Group (Consolidated Detection + Merge)
         self.create_text_processing_group(controls_layout)
 
+        # 4. TTS Group
+        self.create_tts_group(controls_layout)
+
         # Buttons
         btn_layout = QVBoxLayout()
         self.btn_capture = QPushButton("📸 Capture Screenshot")
@@ -676,7 +679,64 @@ class OCRWindow(QMainWindow):
         group.setLayout(g_layout)
         layout.addWidget(group)
 
+    def create_tts_group(self, layout):
+        """Text-to-Speech Settings"""
+        group = QGroupBox("🔊 Text-to-Speech (Kokoro)")
+        g_layout = QVBoxLayout()
+        tts_config = self.config.get("tts", {})
 
+        # Enable Checkbox
+        row1 = QHBoxLayout()
+        chk_enable = QComboBox()
+        chk_enable.addItem("Disabled", False)
+        chk_enable.addItem("Enabled (Read Aloud)", True)
+        is_enabled = tts_config.get("enabled", False)
+        chk_enable.setCurrentIndex(1 if is_enabled else 0)
+
+        def on_enable(idx):
+            val = chk_enable.currentData()
+            if "tts" not in self.config: self.config["tts"] = {}
+            self.config["tts"]["enabled"] = val
+            self.save_config()
+
+        chk_enable.currentIndexChanged.connect(on_enable)
+        row1.addWidget(QLabel("Status:"))
+        row1.addWidget(chk_enable)
+        g_layout.addLayout(row1)
+
+        # Speed Slider
+        row2 = QHBoxLayout()
+        row2.addWidget(QLabel("Speed:"))
+        
+        sl_speed = QSlider(Qt.Orientation.Horizontal)
+        sl_speed.setRange(5, 20)  # 0.5x to 2.0x
+        current_speed = tts_config.get("speed", 1.0)
+        sl_speed.setValue(int(current_speed * 10))
+        
+        sp_speed = QDoubleSpinBox()
+        sp_speed.setRange(0.5, 2.0)
+        sp_speed.setSingleStep(0.1)
+        sp_speed.setValue(current_speed)
+        sp_speed.setMaximumWidth(60)
+
+        def on_speed(v):
+            real_val = v / 10.0 if isinstance(v, int) else v
+            if "tts" not in self.config: self.config["tts"] = {}
+            self.config["tts"]["speed"] = real_val
+            
+            sl_speed.blockSignals(True); sl_speed.setValue(int(real_val*10)); sl_speed.blockSignals(False)
+            sp_speed.blockSignals(True); sp_speed.setValue(real_val); sp_speed.blockSignals(False)
+            self.save_config()
+
+        sl_speed.valueChanged.connect(on_speed)
+        sp_speed.valueChanged.connect(on_speed)
+
+        row2.addWidget(sl_speed)
+        row2.addWidget(sp_speed)
+        g_layout.addLayout(row2)
+
+        group.setLayout(g_layout)
+        layout.addWidget(group)
 
     def save_and_refresh(self):
         """Save config and refresh detection if image exists"""
@@ -1273,6 +1333,10 @@ class OCRWindow(QMainWindow):
                     self.status_label.setText(f"Done! (Clipboard error: {e})")
             else:
                 self.status_label.setText("Done! (Clipboard not available)")
+            
+            # Trigger TTS
+            from src.backend.core.tts import speak_text
+            speak_text(text)
         else:
             self.status_label.setText("Detection complete (no text extracted)")
 

@@ -10,6 +10,7 @@ REM This script installs:
 REM - PyTorch 2.7.0 with CUDA 12.8
 REM - Flash Attention 2.7.4 (Windows prebuilt wheel for torch 2.7.0 + CUDA 12.8)
 REM - H2OVL-Mississippi dependencies (transformers, accelerate, timm, peft)
+REM - Kokoro TTS dependencies (kokoro, soundfile, sounddevice)
 REM - RapidOCR (CPU via ONNX Runtime, no GPU needed)
 REM
 REM NOTE: This configuration (PyTorch 2.7.0 + CUDA 12.8 + Flash Attention 2.7.4)
@@ -21,6 +22,8 @@ echo ========================================
 echo.
 
 echo [1/4] Installing PyTorch 2.7.0 with CUDA 12.8...
+echo NOTE: torchvision 0.22.0 is required for PyTorch 2.7.0 (for Flash Attention compatibility)
+echo       A runtime patch handles the known compatibility issue automatically.
 uv pip install torch==2.7.0 torchvision==0.22.0 torchaudio==2.7.0 --index-url https://download.pytorch.org/whl/cu128
 if errorlevel 1 (
     echo ERROR: Failed to install PyTorch
@@ -57,7 +60,16 @@ if errorlevel 1 (
 )
 
 echo.
-echo [4/4] Installing RapidOCR (CPU via ONNX Runtime)...
+echo [4/5] Installing Kokoro TTS dependencies...
+uv pip install kokoro>=0.9.2 soundfile>=0.12.1 sounddevice>=0.4.6
+if errorlevel 1 (
+    echo ERROR: Failed to install Kokoro TTS dependencies
+    pause
+    exit /b 1
+)
+
+echo.
+echo [5/5] Installing RapidOCR (CPU via ONNX Runtime)...
 uv pip install rapidocr-onnxruntime
 if errorlevel 1 (
     echo ERROR: Failed to install RapidOCR

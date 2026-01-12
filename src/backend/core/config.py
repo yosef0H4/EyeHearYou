@@ -13,6 +13,28 @@ def load_config():
         try:
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
                 config = json.load(f)
+                # Merge in missing TTS config if it doesn't exist (for backward compatibility)
+                if "tts" not in config:
+                    config["tts"] = {
+                        "enabled": True,  # Enable by default
+                        "voice": "af_heart",
+                        "speed": 1.0
+                    }
+                    # Save updated config
+                    with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+                        json.dump(config, f, indent=4)
+                else:
+                    # Ensure all TTS fields exist
+                    tts_defaults = {"enabled": True, "voice": "af_heart", "speed": 1.0}
+                    updated = False
+                    for key, default_value in tts_defaults.items():
+                        if key not in config["tts"]:
+                            config["tts"][key] = default_value
+                            updated = True
+                    if updated:
+                        # Save updated config
+                        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+                            json.dump(config, f, indent=4)
                 return config
         except json.JSONDecodeError:
             print("Error: config.json is not valid JSON")
@@ -28,6 +50,11 @@ def load_config():
                 "dilation": 0,            # 0-5
                 "contrast": 1.0,          # 0.5 - 3.0
                 "brightness": 0           # -100 to 100
+            },
+            "tts": {
+                "enabled": True,          # Enable TTS by default
+                "voice": "af_heart",      # Kokoro voice ID
+                "speed": 1.0              # 0.5 - 2.0
             },
             "text_detection": {
                 "min_width": 30,

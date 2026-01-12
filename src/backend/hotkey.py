@@ -5,6 +5,7 @@ from .core.capture import capture_screenshot
 from .core.config import load_config
 from .core.extraction import extract_text_from_regions
 from .core.task_manager import task_manager
+from .core.tts import speak_text
 from .state import state
 
 
@@ -106,6 +107,9 @@ def capture_and_update_state():
                         print(f"[Hotkey] {msg}")
                         task_manager.emit_status("Extracted (Clipboard failed)", is_loading=False, progress=100)
                     
+                    # Trigger TTS (runs in background)
+                    speak_text(extracted_text)
+
                     # Also print to console for visibility
                     print("\n" + "="*60)
                     print("EXTRACTED TEXT:")
