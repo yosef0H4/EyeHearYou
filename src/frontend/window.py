@@ -255,7 +255,7 @@ class OCRWindow(QMainWindow):
         layout.addWidget(group)
 
     def create_detection_group(self, layout):
-        group = QGroupBox("Detection Settings (PaddleOCR)")
+        group = QGroupBox("Detection Settings (RapidOCR)")
         g_layout = QVBoxLayout()
 
         td_config = self.config.get("text_detection", {})

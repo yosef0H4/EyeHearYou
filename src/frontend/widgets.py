@@ -5,7 +5,7 @@ from PyQt6.QtGui import QPainter, QPen, QColor, QBrush, QFont, QPixmap
 
 
 class PaddleVizWidget(QWidget):
-    """Visualizer widget for Paddle settings showing confidence and size"""
+    """Visualizer widget for text detection settings showing confidence and size"""
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setMinimumSize(120, 120)

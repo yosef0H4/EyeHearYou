@@ -43,16 +43,13 @@ class OCRWorker(QThread):
                 if self.is_cancelled:
                     return
                 
-                raw_detections_with_scores = detect_text_regions_unfiltered(
-                    image,
-                    min_confidence=0.0  # Get all detections, we'll filter by confidence later
-                )
+                raw_detections_with_scores = detect_text_regions_unfiltered(image)
                 
                 if self.is_cancelled:
                     return
                 
                 if raw_detections_with_scores is None:
-                    self.error_signal.emit("Failed to detect text regions. Is PaddleOCR installed?")
+                    self.error_signal.emit("Failed to detect text regions. Is RapidOCR installed?")
                     return
                 
                 # Cache the raw detections
@@ -71,26 +68,20 @@ class OCRWorker(QThread):
                 return
             
             # Apply filters
-            min_confidence = float(td_config.get("min_confidence", 0.6))
+            # Note: RapidOCR doesn't provide confidence scores in detection-only mode,
+            # so we skip confidence filtering and only filter by size
             min_width = int(td_config.get("min_width", 30))
             min_height = int(td_config.get("min_height", 30))
             
             img_height, img_width = image.size[1], image.size[0]
             
-            # Step 1: Apply confidence filter
-            self.progress_signal.emit("Applying confidence filter...", 20)
-            confidence_filtered = [
-                bbox for bbox, score in raw_detections_with_scores
-                if score >= min_confidence
-            ]
+            # Extract bounding boxes (ignore confidence scores since they're all 1.0)
+            all_boxes = [bbox for bbox, score in raw_detections_with_scores]
             
-            if self.is_cancelled:
-                return
-            
-            # Step 2: Apply size filter
-            self.progress_signal.emit("Applying size filter...", 25)
+            # Apply size filter
+            self.progress_signal.emit("Applying size filter...", 20)
             size_filtered = filter_text_regions(
-                confidence_filtered,
+                all_boxes,
                 (img_height, img_width),
                 min_width=min_width,
                 min_height=min_height

@@ -48,7 +48,7 @@ echo.
 echo [4/5] Installing PaddlePaddle GPU...
 echo NOTE: This script uses CUDA 12.9. If you have a different CUDA version, edit this script.
 echo Available versions: cu129, cu128, cu121, cu118, or cu102 (from PyPI)
-uv pip install --pre paddlepaddle-gpu -i https://www.paddlepaddle.org.cn/packages/nightly/cu129/
+uv pip install --pre paddlepaddle-gpu -i https://www.paddlepaddle.org.cn/packages/nightly/cu128/
 if errorlevel 1 (
     echo WARNING: Failed to install PaddlePaddle GPU. Trying alternative...
     uv pip install paddlepaddle-gpu==2.6.2

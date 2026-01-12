@@ -117,13 +117,12 @@ def extract_text_from_regions(full_image, config):
 
     # Get text detection settings from config
     text_detection_config = config.get("text_detection", {})
-    min_confidence = text_detection_config.get("min_confidence", 0.6)
     min_width = text_detection_config.get("min_width", 30)
     min_height = text_detection_config.get("min_height", 30)
     
     # Try to detect text regions first
+    # Note: min_confidence is not used since RapidOCR doesn't provide confidence scores in detection-only mode
     text_regions = detect_text_regions(full_image, 
-                                      min_confidence=min_confidence,
                                       min_width=min_width,
                                       min_height=min_height)
     

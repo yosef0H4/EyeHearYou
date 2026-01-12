@@ -10,6 +10,7 @@ dependencies = [
     "opencv-python>=4.8.0",
     "openai>=2.15.0",
     "pillow>=12.1.0",
+    "rapidocr-onnxruntime",
     "pygetwindow>=0.0.9",
     "pyperclip>=1.8.2",
     "pyqt6",
@@ -23,37 +24,18 @@ dependencies = [
     "huggingface-hub[hf-xet]>=0.36.0",
 ]
 
-# Note: PaddleOCR is NOT included in dependencies to avoid conflicts with paddlepaddle-gpu.
-# If paddleocr is listed here, package managers will install paddlepaddle (CPU version),
-# which will replace paddlepaddle-gpu if it's already installed.
+# Note: RapidOCR is used for text detection instead of PaddleOCR to avoid
+# conflicts with PyTorch. RapidOCR uses ONNX Runtime which runs on CPU and
+# doesn't interfere with PyTorch installations.
 #
-# For GPU support with PaddleOCR, install paddlepaddle-gpu==2.6.2 separately FIRST:
-# 
-# Check your CUDA version first: nvidia-smi
-# 
-# PyPI only provides CUDA 10.2 builds. For other CUDA versions, use the official website:
-# Reference: https://pypi.org/project/paddlepaddle-gpu/
-# 
-# For CUDA 10.2 (from PyPI):
-#   pip install paddlepaddle-gpu==2.6.2
-# 
-# For CUDA 11.2/11.6/11.7 (from PaddlePaddle website):
-#   Check the official installation document: https://www.paddlepaddle.org.cn/install/quick
-#   Example for CUDA 11.8 (if available):
-#   pip install paddlepaddle-gpu==2.6.2 -i https://www.paddlepaddle.org.cn/packages/stable/cu118/
-# 
-# For CPU-only:
-#   pip install paddlepaddle==2.6.2
-# 
-# After installing paddlepaddle-gpu, install PaddleOCR:
-#   pip install paddleocr
+# Installation:
+#   uv pip install rapidocr-onnxruntime
 #
-# IMPORTANT: Install paddlepaddle-gpu BEFORE paddleocr to ensure the GPU version
-# is used. If you install paddleocr first, it will pull in paddlepaddle (CPU) as
-# a dependency, which will conflict with paddlepaddle-gpu.
+# RapidOCR runs on CPU via ONNX Runtime and doesn't require GPU or CUDA.
+# It's lightweight and doesn't conflict with PyTorch dependencies.
 #
-# The application gracefully handles missing PaddleOCR - it will process the full
-# image instead of detecting text regions if PaddleOCR is not installed.
+# The application gracefully handles missing RapidOCR - it will process the full
+# image instead of detecting text regions if RapidOCR is not installed.
 #
 # See README.md for detailed installation instructions
 #
