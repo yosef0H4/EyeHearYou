@@ -5,7 +5,7 @@ A lightweight Python application for extracting text from visual novels and game
 ## Features
 
 - **One-Key Extraction**: Press `Ctrl+Shift+Alt+Z` to automatically capture, detect, extract, and copy text to clipboard
-- **Web UI for Tuning**: Visual interface to fine-tune detection and merge settings with live preview
+- **Desktop GUI**: Visual interface to fine-tune detection and merge settings with live preview
 - **Backend-Authoritative**: All detection/merging logic runs in Python for consistency between preview and extraction
 - **Smart Text Detection**: Uses PaddleOCR to detect text regions, then sends only cropped regions to Vision API (reduces costs by 90%+)
 - **Auto-Merge Dialogue**: Automatically merges split dialogue lines with configurable tolerances
@@ -91,30 +91,13 @@ Edit `config.json` to set your API settings:
 
 ## Quick Start
 
-### Option 1: Native Desktop GUI (Recommended)
+### Desktop GUI (Recommended)
 
 The PyQt6 GUI provides instant feedback, real progress bars, and zero latency:
 
 ```bash
 uv run python run_gui.py
 ```
-
-**Features:**
-- **Instant Updates**: No server round-trips, everything happens in the same process
-- **Real Progress Bars**: See exactly what's happening (detection, merging, OCR)
-- **Working Cancellation**: Cancel button actually stops the process immediately
-- **Native Performance**: Drawing boxes and updating UI is instant
-- **Hotkey Support**: Press `Ctrl+Shift+Alt+Z` anywhere to capture
-
-### Option 2: Web UI (For Remote Access)
-
-If you need to access the UI from another device or prefer web interfaces:
-
-```bash
-uv run python run_server.py
-```
-
-Then open your browser to: `http://localhost:8000`
 
 **Press `Ctrl+Shift+Alt+Z`** while playing a visual novel - that's it! Text is automatically:
 - Captured from the active window
@@ -125,9 +108,16 @@ Then open your browser to: `http://localhost:8000`
 
 The UI automatically updates to show detection boxes and extracted text. You only need to use the UI buttons if you want to tune settings for better detection.
 
+**Features:**
+- **Instant Updates**: No server round-trips, everything happens in the same process
+- **Real Progress Bars**: See exactly what's happening (detection, merging, OCR)
+- **Working Cancellation**: Cancel button actually stops the process immediately
+- **Native Performance**: Drawing boxes and updating UI is instant
+- **Hotkey Support**: Press `Ctrl+Shift+Alt+Z` anywhere to capture
+
 ## Usage
 
-### Option 1: Native Desktop GUI (Recommended)
+### Desktop GUI (Recommended)
 
 The PyQt6 GUI is the best option for local use - it's faster, more responsive, and has working progress bars:
 
@@ -149,22 +139,6 @@ uv run python run_gui.py
 - All settings auto-save to `config.json`
 - Hotkey support: Press `Ctrl+Shift+Alt+Z` anywhere
 
-### Option 2: Web UI (For Remote Access or Web Preference)
-
-The web UI provides a visual interface to tweak OCR settings with live preview:
-
-```bash
-uv run python run_server.py
-```
-
-Then open your browser to: `http://localhost:8000`
-
-**Features:**
-- **Live Preview**: See detection boxes (red) and merged boxes (blue) update in real-time
-- **Visual Sliders**: Adjust all settings with immediate visual feedback
-- **Mini Visualizers**: See how min width/height and merge tolerances affect detection
-- **Non-destructive Overlays**: Boxes are drawn as HTML overlays, not on the image
-
 **Workflow:**
 1. **Quick Start**: Just press `Ctrl+Shift+Alt+Z` while playing a visual novel - text is automatically extracted and copied to clipboard!
 2. **Tune Settings** (optional): Use the UI to adjust detection sensitivity and merge tolerances
@@ -174,7 +148,7 @@ Then open your browser to: `http://localhost:8000`
 3. **Manual Mode** (optional): Click "New Screenshot" and "Run Detection" if you want to manually test settings
 4. The UI automatically shows results from hotkey captures - no need to press buttons unless re-tuning settings
 
-### Option 3: Standalone CLI (No UI)
+### Standalone CLI (No UI)
 
 For headless operation without the web UI:
 
@@ -182,17 +156,16 @@ For headless operation without the web UI:
 uv run python -m src.backend.cli
 ```
 
-This runs the same hotkey functionality but prints results to console instead of updating a web UI. Useful for automation or when you don't need the visual interface.
+This runs the same hotkey functionality but prints results to console instead of updating a UI. Useful for automation or when you don't need the visual interface.
 
-**Note**: The web UI mode (`run_server.py`) is recommended as it provides visual feedback and allows you to tune settings easily.
+**Note**: The desktop GUI mode (`run_gui.py`) is recommended as it provides visual feedback and allows you to tune settings easily.
 
 ## Architecture
 
 - **Backend-Authoritative**: All detection and merging logic runs in Python for consistency
-- **Lightweight Frontend**: TypeScript UI only renders results - no duplicate algorithms
-- **Debounced Updates**: Slider changes only trigger server requests on release (no spam)
+- **Native GUI**: PyQt6 desktop application with instant updates and real progress tracking
 - **Cached Detections**: Detection results are cached per screenshot version for fast preview updates
-- **Auto-Sync**: UI automatically reflects hotkey results via Server-Sent Events (SSE)
+- **Live Preview**: Confidence and size filters are applied after PaddleOCR runs, enabling instant preview updates without re-running detection
 
 ## Notes
 
@@ -213,7 +186,7 @@ This runs the same hotkey functionality but prints results to console instead of
 - Ensure the model supports vision capabilities
 
 ### Import errors
-- Make sure you're using the virtual environment: `uv run python run_server.py` or `uv run python run_cli.py`
+- Make sure you're using the virtual environment: `uv run python run_gui.py` or `uv run python run_cli.py`
 - Or activate the venv: `.venv\Scripts\activate` (Windows) or `source .venv/bin/activate` (Linux/Mac)
 
 ### PaddleOCR GPU issues

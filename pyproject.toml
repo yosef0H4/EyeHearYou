@@ -4,7 +4,6 @@ version = "0.1.0"
 description = "Lightweight OCR tool for visual novels and games - one-key text extraction with AI-powered OCR. Press Ctrl+Shift+Alt+Z to capture, detect, extract, and copy text to clipboard automatically."
 requires-python = ">=3.12"
 dependencies = [
-    "fastapi>=0.104.0",
     "gitignore-parser>=0.1.0",
     "keyboard>=0.13.5",
     "numpy>=1.24.0",
@@ -15,7 +14,6 @@ dependencies = [
     "pyperclip>=1.8.2",
     "pyqt6",
     "streamlit>=1.52.2",
-    "uvicorn>=0.24.0",
 ]
 
 # Note: PaddleOCR is NOT included in dependencies to avoid conflicts with paddlepaddle-gpu.

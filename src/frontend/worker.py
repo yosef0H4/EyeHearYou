@@ -28,7 +28,7 @@ class OCRWorker(QThread):
                 self.error_signal.emit("No image captured. Please capture a screenshot first.")
                 return
 
-            # 1. Detection Phase (with caching like server)
+            # 1. Detection Phase (with caching)
             td_config = self.config.get("text_detection", {})
             cached_key = state.screenshot_version
             raw_detections_with_scores = None
@@ -70,7 +70,7 @@ class OCRWorker(QThread):
                     self.finished_signal.emit([], [], None)
                 return
             
-            # Apply filters (like server does)
+            # Apply filters
             min_confidence = float(td_config.get("min_confidence", 0.6))
             min_width = int(td_config.get("min_width", 30))
             min_height = int(td_config.get("min_height", 30))
@@ -132,7 +132,7 @@ class OCRWorker(QThread):
 
             self.progress_signal.emit(f"After merging close boxes: {len(merged_regions)} text region(s)", 25)
 
-            # Format merged boxes with count and original boxes (like server does)
+            # Format merged boxes with count and original boxes
             merged_boxes_info = []
             for i, (merged_box, is_merged_flag, orig_group) in enumerate(zip(merged_regions, is_merged, original_groups)):
                 if is_merged_flag and orig_group:

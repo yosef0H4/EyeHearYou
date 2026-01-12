@@ -3,8 +3,8 @@ Standalone CLI entry point for OCR application
 Captures screenshots on Ctrl+Shift+Alt+Z and extracts text using OpenAI Vision API
 Uses text detection to only send text regions to the API, reducing costs
 
-This is the standalone CLI version (without the web UI).
-For the web UI, use run_server.py instead.
+This is the standalone CLI version (without the GUI).
+For the GUI, use run_gui.py instead.
 """
 import keyboard
 import sys
