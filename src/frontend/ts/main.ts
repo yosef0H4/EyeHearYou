@@ -29,12 +29,18 @@ async function initialize(): Promise<void> {
         updatePaddleViz();
         updateMergeViz();
         
-        // Setup SSE for auto-updating screenshots
+        // Setup SSE for auto-updating screenshots and status
         sseManager = new SSEManager(async (event) => {
-            if (imageViewer) {
-                await imageViewer.loadScreenshot();
-                // Auto-run detection and load extraction when new screenshot arrives
-                await autoRefreshOnNewScreenshot(event.version);
+            if (event.type === "status") {
+                updateStatusUI(event);
+            } 
+            else if (event.type === "screenshot" || event.version) {
+                // Backward compatibility if backend sends old format
+                if (imageViewer && event.version) {
+                    await imageViewer.loadScreenshot();
+                    // Auto-run detection and load extraction when new screenshot arrives
+                    await autoRefreshOnNewScreenshot(event.version);
+                }
             }
         });
         sseManager.connect();
@@ -305,10 +311,12 @@ function setupEventListeners(): void {
     const captureBtn = document.getElementById('capture-btn');
     const detectBtn = document.getElementById('detect-btn');
     const extractBtn = document.getElementById('extract-btn');
+    const cancelBtn = document.getElementById('cancel-btn');
     
     if (captureBtn) captureBtn.addEventListener('click', handleCapture);
     if (detectBtn) detectBtn.addEventListener('click', handleDetection);
     if (extractBtn) extractBtn.addEventListener('click', handleExtraction);
+    if (cancelBtn) cancelBtn.addEventListener('click', handleCancel);
     
     // Cleanup on page unload
     window.addEventListener('beforeunload', () => {
@@ -472,6 +480,76 @@ async function handleExtraction(): Promise<void> {
         if (outputText) {
             outputText.innerText = "❌ Error: " + (e as Error).message;
         }
+    }
+}
+
+function updateStatusUI(event: any): void {
+    const container = document.getElementById('status-container');
+    const msgEl = document.getElementById('status-message');
+    const barEl = document.getElementById('progress-bar');
+    const percentEl = document.getElementById('status-percent');
+    const extractBtn = document.getElementById('extract-btn') as HTMLButtonElement;
+    const captureBtn = document.getElementById('capture-btn') as HTMLButtonElement;
+    const detectBtn = document.getElementById('detect-btn') as HTMLButtonElement;
+
+    if (!container || !msgEl || !barEl) return;
+
+    if (event.isLoading) {
+        container.style.display = 'block';
+        msgEl.innerText = event.message || "Processing...";
+        
+        if (event.progress !== undefined) {
+            barEl.style.width = `${event.progress}%`;
+            if (percentEl) percentEl.innerText = `${Math.round(event.progress)}%`;
+        }
+        
+        // Disable buttons while processing
+        if (extractBtn) extractBtn.disabled = true;
+        if (captureBtn) captureBtn.disabled = true;
+        if (detectBtn) detectBtn.disabled = true;
+    } else {
+        // Finished or Cancelled
+        msgEl.innerText = event.message || "Ready";
+        if (percentEl) percentEl.innerText = "";
+        
+        // Short delay before hiding if successful
+        setTimeout(() => {
+            container.style.display = 'none';
+            barEl.style.width = '0%';
+        }, 2000);
+
+        // Re-enable buttons
+        if (extractBtn) extractBtn.disabled = false;
+        if (captureBtn) captureBtn.disabled = false;
+        if (detectBtn) detectBtn.disabled = false;
+        
+        // Refresh extraction text if finished
+        if (event.message && (event.message.includes("Copied") || event.message.includes("Extracted"))) {
+            loadLastExtraction();
+        }
+    }
+}
+
+async function handleCancel(): Promise<void> {
+    try {
+        await fetch('/cancel', { method: 'POST' });
+        const msgEl = document.getElementById('status-message');
+        if (msgEl) msgEl.innerText = "Cancelling...";
+    } catch (e) {
+        console.error("Error canceling:", e);
+    }
+}
+
+async function loadLastExtraction(): Promise<void> {
+    try {
+        const res = await fetch('/last_extraction');
+        const data = await res.json();
+        const outputText = document.getElementById('output-text');
+        if (data.status === "success" && data.text && outputText) {
+            outputText.innerText = data.text;
+        }
+    } catch (e) {
+        console.error(e);
     }
 }
 

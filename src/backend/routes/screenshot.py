@@ -4,6 +4,7 @@ import json
 from fastapi.responses import StreamingResponse
 
 from ..core.image_utils import image_to_base64
+from ..core.task_manager import task_manager
 from ..state import state
 from ..hotkey import capture_and_update_state
 
@@ -45,26 +46,43 @@ async def get_screenshot():
         return {"status": "error", "message": str(e)}
 
 
+async def cancel_task():
+    """Cancel currently running task"""
+    task_manager.cancel_current_task()
+    return {"status": "success", "message": "Cancellation requested"}
+
+
 async def screenshot_events():
-    """Server-Sent Events stream for screenshot updates"""
+    """Server-Sent Events stream for screenshot AND status updates"""
     async def event_generator():
         last_version = state.screenshot_version
+        
         while True:
             try:
-                # Check for new screenshot (non-blocking)
+                # 1. Check for State/Screenshot events
                 try:
-                    event = state.screenshot_queue.get_nowait()
-                    if event["version"] > last_version:
-                        last_version = event["version"]
+                    while not state.screenshot_queue.empty():
+                        event = state.screenshot_queue.get_nowait()
+                        # Ensure type is set for frontend discrimination
+                        if "type" not in event:
+                            event["type"] = "screenshot"
                         yield f"data: {json.dumps(event)}\n\n"
                 except:
-                    pass  # Queue is empty, continue
+                    pass
+
+                # 2. Check for Task Manager Status events
+                try:
+                    while not task_manager.message_queue.empty():
+                        msg = task_manager.message_queue.get_nowait()
+                        yield f"data: {json.dumps(msg)}\n\n"
+                except:
+                    pass
                 
-                # Also check state directly (in case queue was missed)
+                # 3. Also check state directly (in case queue was missed)
                 if state.screenshot_version > last_version:
                     last_version = state.screenshot_version
                     if state.last_image:
-                        yield f"data: {json.dumps({'version': last_version, 'width': state.last_image.width, 'height': state.last_image.height})}\n\n"
+                        yield f"data: {json.dumps({'type': 'screenshot', 'version': last_version, 'width': state.last_image.width, 'height': state.last_image.height})}\n\n"
                 
                 # Small delay to prevent busy waiting
                 await asyncio.sleep(0.1)

@@ -14,6 +14,7 @@ except ImportError:
 
 from .image_utils import check_gpu_available
 from .filtering import filter_text_regions, sort_text_regions_by_reading_order
+from .task_manager import task_manager
 
 
 def detect_text_regions(image, min_confidence=0.6, min_width=30, min_height=30):
@@ -26,6 +27,9 @@ def detect_text_regions(image, min_confidence=0.6, min_width=30, min_height=30):
         min_confidence: Minimum confidence score (0.0-1.0) to keep a detection. 
                        Higher values filter out more false positives. Default: 0.5
     """
+    if task_manager.is_cancelled():
+        return None
+    
     if not PADDLEOCR_AVAILABLE or TextDetection is None or cv2 is None:
         return None
     
@@ -52,6 +56,10 @@ def detect_text_regions(image, min_confidence=0.6, min_width=30, min_height=30):
         
         # Run detection - predict() returns a list of results
         output = det_model.predict(img_bgr, batch_size=1)
+        
+        # Check for cancellation after detection
+        if task_manager.is_cancelled():
+            return None
         
         # Extract bounding boxes from TextDetection output
         # Output format: [{'res': {'dt_polys': array([[[x1, y1], [x2, y2], [x3, y3], [x4, y4]], ...]), 'dt_scores': [...]}}]
@@ -145,6 +153,9 @@ def detect_text_regions_unfiltered(image, min_confidence=0.6):
     Returns:
         List of tuples: ((x1, y1, x2, y2), confidence_score) for all valid detections
     """
+    if task_manager.is_cancelled():
+        return None
+    
     if not PADDLEOCR_AVAILABLE or TextDetection is None or cv2 is None:
         return None
     
@@ -169,6 +180,10 @@ def detect_text_regions_unfiltered(image, min_confidence=0.6):
         
         # Run detection
         output = det_model.predict(img_bgr, batch_size=1)
+        
+        # Check for cancellation after detection
+        if task_manager.is_cancelled():
+            return None
         
         # Extract bounding boxes from TextDetection output
         text_regions = []

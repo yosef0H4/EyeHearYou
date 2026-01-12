@@ -4,6 +4,7 @@ import threading
 from .core.capture import capture_screenshot
 from .core.config import load_config
 from .core.extraction import extract_text_from_regions
+from .core.task_manager import task_manager
 from .state import state
 
 
@@ -53,15 +54,24 @@ def copy_to_clipboard(text: str) -> bool:
 
 def capture_and_update_state():
     """Capture screenshot, run detection+OCR, and copy to clipboard (called by hotkey)"""
+    # 1. Cancel any existing tasks immediately
+    task_manager.start_task("Hotkey Capture")
+    
     try:
+        task_manager.emit_status("Capturing Screenshot...", progress=5)
         screenshot = capture_screenshot()
+        
         if screenshot:
+            if task_manager.is_cancelled():
+                return False
+
             state.last_image = screenshot
             state.reset_detections()
             state.screenshot_version += 1
             
-            # Notify SSE listeners
+            # Notify SSE listeners about the new image
             state.screenshot_queue.put({
+                "type": "screenshot",
                 "version": state.screenshot_version,
                 "width": screenshot.width,
                 "height": screenshot.height
@@ -73,8 +83,14 @@ def capture_and_update_state():
             try:
                 print("[Hotkey] Running detection and OCR...")
                 config = load_config()
+                # extract_text_from_regions now handles status updates internally
                 extracted_text = extract_text_from_regions(screenshot, config)
                 
+                if task_manager.is_cancelled():
+                    print("[Hotkey] Task cancelled.")
+                    task_manager.emit_status("Cancelled", is_loading=False)
+                    return False
+
                 if extracted_text:
                     # Store result in state for UI
                     state.last_extracted_text = extracted_text
@@ -82,9 +98,13 @@ def capture_and_update_state():
                     
                     # Copy to clipboard
                     if copy_to_clipboard(extracted_text):
-                        print(f"[Hotkey] ✅ Text extracted and copied to clipboard ({len(extracted_text)} chars)")
+                        msg = f"✅ Text extracted and copied to clipboard ({len(extracted_text)} chars)"
+                        print(f"[Hotkey] {msg}")
+                        task_manager.emit_status(f"Copied {len(extracted_text)} chars", is_loading=False, progress=100)
                     else:
-                        print(f"[Hotkey] ✅ Text extracted ({len(extracted_text)} chars) but clipboard copy failed")
+                        msg = f"✅ Text extracted ({len(extracted_text)} chars) but clipboard copy failed"
+                        print(f"[Hotkey] {msg}")
+                        task_manager.emit_status("Extracted (Clipboard failed)", is_loading=False, progress=100)
                     
                     # Also print to console for visibility
                     print("\n" + "="*60)
@@ -94,17 +114,25 @@ def capture_and_update_state():
                     print("="*60 + "\n")
                 else:
                     print("[Hotkey] ⚠️  No text extracted from screenshot")
+                    task_manager.emit_status("No text found", is_loading=False, progress=100)
                     state.last_extracted_text = None
             except Exception as e:
                 print(f"[Hotkey] ⚠️  Error during detection/OCR: {e}")
                 import traceback
                 traceback.print_exc()
+                task_manager.emit_status(f"Error: {str(e)[:30]}...", is_loading=False)
                 # Still return True since screenshot was captured successfully
             
+            task_manager.finish_task()
             return True
-        return False
+        else:
+            task_manager.emit_status("Screenshot failed", is_loading=False)
+            task_manager.finish_task()
+            return False
     except Exception as e:
         print(f"[Hotkey] Error capturing screenshot: {e}")
+        task_manager.emit_status("Error capturing", is_loading=False)
+        task_manager.finish_task()
         return False
 
 

@@ -6,6 +6,7 @@ from typing import List, Tuple
 from ..core.detection import detect_text_regions_unfiltered
 from ..core.filtering import filter_text_regions, sort_text_regions_by_reading_order
 from ..core.merging import merge_close_text_boxes
+from ..core.task_manager import task_manager
 from ..state import state
 
 
@@ -72,11 +73,19 @@ async def detect_preview(request: Request):
             print(f"Using cached detections for screenshot version {cached_key}")
         else:
             # Run new detection
+            task_manager.start_task("Detection Preview")
+            task_manager.emit_status("Running PaddleOCR detection...", progress=5)
             min_confidence_for_detection = float(settings.get("min_confidence", 0.6))
             raw_detections_with_scores = detect_text_regions_unfiltered(
                 state.last_image,
                 min_confidence=0.0  # Get all detections, we'll filter by confidence later
             )
+            
+            if task_manager.is_cancelled():
+                task_manager.finish_task()
+                return {"status": "error", "message": "Detection cancelled"}
+            
+            task_manager.emit_status("Processing detections...", progress=50)
             
             if raw_detections_with_scores is None:
                 return {
@@ -172,6 +181,11 @@ async def detect_preview(request: Request):
         # Update state for backward compatibility
         state.unfiltered_detections = confidence_filtered
         state.last_detections = size_filtered
+        
+        # Finish task if we started one
+        if task_manager.is_running():
+            task_manager.emit_status("Detection complete", is_loading=False, progress=100)
+            task_manager.finish_task()
         
         return {
             "status": "success",

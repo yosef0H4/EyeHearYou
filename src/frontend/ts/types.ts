@@ -63,9 +63,15 @@ export interface MergedBox {
 }
 
 export interface ScreenshotEvent {
-    version: number;
-    width: number;
-    height: number;
+    type?: "screenshot" | "status";
+    // Screenshot fields
+    version?: number;
+    width?: number;
+    height?: number;
+    // Status fields
+    message?: string;
+    progress?: number;
+    isLoading?: boolean;
 }
 
 

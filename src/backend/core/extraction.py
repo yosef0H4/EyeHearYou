@@ -4,6 +4,7 @@ from .image_utils import resize_image_if_needed, image_to_base64
 from .detection import detect_text_regions
 from .merging import merge_close_text_boxes
 from .debug import save_debug_images
+from .task_manager import task_manager
 
 
 def crop_text_regions(image, text_regions, padding=5):
@@ -31,6 +32,10 @@ def crop_text_regions(image, text_regions, padding=5):
 
 def extract_text_with_vision_api(image, config):
     """Extract text from a single image using OpenAI Vision API"""
+    # Check for cancellation before starting
+    if task_manager.is_cancelled():
+        return None
+    
     # Initialize OpenAI client with custom base URL
     client = OpenAI(
         api_key=config["api_key"],
@@ -44,6 +49,8 @@ def extract_text_with_vision_api(image, config):
     max_retries = 3
     
     while retry_count <= max_retries:
+        if task_manager.is_cancelled():
+            return None
         try:
             # Resize image if too large to prevent context window overflow
             current_image = resize_image_if_needed(original_image, max_dimension=max_dimension)
@@ -103,6 +110,11 @@ def extract_text_from_regions(full_image, config):
     Extract text by first detecting text regions, then sending only those regions to the API.
     This is more cost-effective than sending the full image.
     """
+    # 1. Detection Phase
+    task_manager.emit_status("Detecting text regions...", progress=10)
+    if task_manager.is_cancelled():
+        return None
+
     # Get text detection settings from config
     text_detection_config = config.get("text_detection", {})
     min_confidence = text_detection_config.get("min_confidence", 0.6)
@@ -115,12 +127,20 @@ def extract_text_from_regions(full_image, config):
                                       min_width=min_width,
                                       min_height=min_height)
     
+    if task_manager.is_cancelled():
+        return None
+
     if text_regions is None or len(text_regions) == 0:
         # Fallback: if detection fails or no regions found, use full image
+        task_manager.emit_status("No regions found, processing full image...", progress=20)
         print("No text regions detected or detection unavailable, using full image...")
         return extract_text_with_vision_api(full_image, config)
     
     print(f"Detected {len(text_regions)} text region(s), processing individually...")
+    task_manager.emit_status(f"Detected {len(text_regions)} text region(s), processing individually...", progress=15)
+    
+    # 2. Merging Phase
+    task_manager.emit_status(f"Merging {len(text_regions)} regions...", progress=20)
     
     # Merge close text boxes (like split dialogue lines)
     merge_vertical_tolerance = text_detection_config.get("merge_vertical_tolerance", 30)
@@ -134,9 +154,11 @@ def extract_text_from_regions(full_image, config):
     )
     print(f"After merging close boxes: {len(text_regions)} text region(s)")
     
-    # Crop text regions
+    if task_manager.is_cancelled():
+        return None
+
+    # 3. Cropping Phase
     cropped_images = crop_text_regions(full_image, text_regions)
-    
     if not cropped_images:
         print("No valid text regions to process, using full image...")
         return extract_text_with_vision_api(full_image, config)
@@ -144,13 +166,24 @@ def extract_text_from_regions(full_image, config):
     # Save debug images (merged boxes in blue, original boxes in green)
     save_debug_images(full_image, text_regions, cropped_images, is_merged=is_merged)
     
-    # Process each cropped region
+    # 4. Extraction Phase
     all_texts = []
+    total_regions = len(cropped_images)
+    
     for i, cropped_img in enumerate(cropped_images):
-        print(f"Processing region {i+1}/{len(cropped_images)}...")
+        if task_manager.is_cancelled():
+            print("Extraction cancelled during region processing.")
+            return None
+            
+        progress = 30 + ((i / total_regions) * 70)  # Map 0-100% of regions to 30-100% total progress
+        task_manager.emit_status(f"Processing region {i+1}/{total_regions}...", progress=progress)
+        print(f"Processing region {i+1}/{total_regions}...")
+        
         text = extract_text_with_vision_api(cropped_img, config)
         if text and text.strip():
             all_texts.append(text.strip())
+    
+    task_manager.emit_status("Finalizing...", progress=100)
     
     # Combine all extracted texts
     if all_texts:

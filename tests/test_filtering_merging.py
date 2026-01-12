@@ -143,3 +143,4 @@ def test_parity_preview_vs_extraction():
     assert len(merged) >= 1
     assert len(merged) <= 3
 
+

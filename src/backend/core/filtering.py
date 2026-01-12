@@ -109,3 +109,4 @@ def filter_text_regions(text_regions, image_shape, min_width=30, min_height=30):
     return filtered
 
 
+

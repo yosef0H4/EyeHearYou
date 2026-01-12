@@ -99,9 +99,22 @@
     </div>
 
     <button class="success" id="capture-btn">📷 New Screenshot</button>
-    <div class="info-text" style="margin-top: 10px; text-align: center;">
-        💡 Tip: Press <strong>Ctrl+Shift+Alt+Z</strong> anywhere to capture screenshot automatically
+    <div class="info-text" style="margin-top: 5px; text-align: center;">
+        <small>Hotkey: <strong>Ctrl+Shift+Alt+Z</strong></small>
     </div>
+    
+    <!-- Status & Progress Container -->
+    <div id="status-container" style="display: none; margin: 15px 0; background: #252526; padding: 10px; border-radius: 4px; border: 1px solid #3e3e42;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+            <span id="status-message" style="font-size: 12px; color: #fff;">Processing...</span>
+            <span id="status-percent" style="font-size: 11px; color: #aaa;">0%</span>
+        </div>
+        <div style="background: #333; height: 6px; border-radius: 3px; overflow: hidden;">
+            <div id="progress-bar" style="width: 0%; height: 100%; background: #007acc; transition: width 0.3s ease;"></div>
+        </div>
+        <button id="cancel-btn" style="background: #a93030; margin-top: 8px; padding: 6px; font-size: 11px; width: 100%;">⛔ Cancel</button>
+    </div>
+
     <button class="warning" id="extract-btn">🚀 EXTRACT TEXT</button>
 </div>
 

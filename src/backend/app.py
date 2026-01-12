@@ -55,6 +55,7 @@ app.post("/config")(config.save_config)
 app.post("/capture")(screenshot.capture)
 app.get("/screenshot")(screenshot.get_screenshot)
 app.get("/screenshot/events")(screenshot.screenshot_events)
+app.post("/cancel")(screenshot.cancel_task)
 
 app.post("/detect_preview")(detection.detect_preview)
 

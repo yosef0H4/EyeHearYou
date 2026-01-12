@@ -91,27 +91,65 @@ Edit `config.json` to set your API settings:
 
 ## Quick Start
 
-1. **Start the server:**
-   ```bash
-   uv run python run_server.py
-   ```
+### Option 1: Native Desktop GUI (Recommended)
 
-2. **Open the UI** in your browser: `http://localhost:8000`
+The PyQt6 GUI provides instant feedback, real progress bars, and zero latency:
 
-3. **Press `Ctrl+Shift+Alt+Z`** while playing a visual novel - that's it! Text is automatically:
-   - Captured from the active window
-   - Detected using PaddleOCR
-   - Merged into complete dialogue lines
-   - Extracted using AI
-   - **Copied to your clipboard**
+```bash
+uv run python run_gui.py
+```
 
-4. **Paste anywhere** - the text is ready to use!
+**Features:**
+- **Instant Updates**: No server round-trips, everything happens in the same process
+- **Real Progress Bars**: See exactly what's happening (detection, merging, OCR)
+- **Working Cancellation**: Cancel button actually stops the process immediately
+- **Native Performance**: Drawing boxes and updating UI is instant
+- **Hotkey Support**: Press `Ctrl+Shift+Alt+Z` anywhere to capture
+
+### Option 2: Web UI (For Remote Access)
+
+If you need to access the UI from another device or prefer web interfaces:
+
+```bash
+uv run python run_server.py
+```
+
+Then open your browser to: `http://localhost:8000`
+
+**Press `Ctrl+Shift+Alt+Z`** while playing a visual novel - that's it! Text is automatically:
+- Captured from the active window
+- Detected using PaddleOCR
+- Merged into complete dialogue lines
+- Extracted using AI
+- **Copied to your clipboard**
 
 The UI automatically updates to show detection boxes and extracted text. You only need to use the UI buttons if you want to tune settings for better detection.
 
 ## Usage
 
-### Option 1: Web UI (Recommended for Configuration)
+### Option 1: Native Desktop GUI (Recommended)
+
+The PyQt6 GUI is the best option for local use - it's faster, more responsive, and has working progress bars:
+
+```bash
+uv run python run_gui.py
+```
+
+**Why use the GUI:**
+- ✅ **Zero latency** - no HTTP requests, everything is instant
+- ✅ **Real progress bars** - see exactly what's happening
+- ✅ **Working cancellation** - cancel button actually stops processes
+- ✅ **Better performance** - native drawing is faster than HTML overlays
+- ✅ **Simpler architecture** - no server, no SSE, no state sync issues
+
+**Features:**
+- Live preview with bounding boxes drawn directly on the image
+- Real-time progress updates during detection and OCR
+- Cancel button that actually works
+- All settings auto-save to `config.json`
+- Hotkey support: Press `Ctrl+Shift+Alt+Z` anywhere
+
+### Option 2: Web UI (For Remote Access or Web Preference)
 
 The web UI provides a visual interface to tweak OCR settings with live preview:
 
@@ -136,7 +174,7 @@ Then open your browser to: `http://localhost:8000`
 3. **Manual Mode** (optional): Click "New Screenshot" and "Run Detection" if you want to manually test settings
 4. The UI automatically shows results from hotkey captures - no need to press buttons unless re-tuning settings
 
-### Option 2: Standalone CLI (No Web UI)
+### Option 3: Standalone CLI (No UI)
 
 For headless operation without the web UI:
 

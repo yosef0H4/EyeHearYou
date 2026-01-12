@@ -20,9 +20,19 @@ export class SSEManager {
         this.eventSource.onmessage = async (event) => {
             try {
                 const data: ScreenshotEvent = JSON.parse(event.data);
-                if (data.version && data.version > this.currentVersion) {
-                    this.currentVersion = data.version;
+                // Handle status events (always process)
+                if (data.type === "status") {
                     await this.onScreenshotUpdate(data);
+                }
+                // Handle screenshot events (version check)
+                else if (data.type === "screenshot" || data.version) {
+                    if (data.version && data.version > this.currentVersion) {
+                        this.currentVersion = data.version;
+                        await this.onScreenshotUpdate(data);
+                    } else if (!data.version) {
+                        // Backward compatibility: if no type but has version-like fields
+                        await this.onScreenshotUpdate(data);
+                    }
                 }
             } catch (e) {
                 console.error('Error processing SSE event:', e);
