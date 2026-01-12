@@ -76,3 +76,4 @@ def save_debug_images(full_image, text_regions, cropped_images, is_merged=None, 
 
 
 
+
