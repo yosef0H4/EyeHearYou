@@ -1,13 +1,38 @@
 """
 Test script for H2OVL-Mississippi-0.8B OCR model
 Tests the model against test.png to verify installation and functionality
+
+Usage:
+    python test_h2ovl.py [--no-patch]
+    
+    --no-patch: Skip applying the torchvision compatibility patch
 """
+import argparse
 import warnings
+import sys
+from pathlib import Path
+import importlib.util
+
+# Parse arguments
+parser = argparse.ArgumentParser(description="Test H2OVL OCR model installation")
+parser.add_argument("--no-patch", action="store_true", help="Skip applying torchvision compatibility patch")
+args = parser.parse_args()
+
+# CRITICAL: Apply torchvision patch BEFORE importing torch or anything that imports torch
+# (unless --no-patch is specified)
+if not args.no_patch:
+    # Import patch module directly without triggering __init__.py
+    spec = importlib.util.spec_from_file_location("torchvision_patch", "src/backend/core/torchvision_patch.py")
+    torchvision_patch = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(torchvision_patch)
+    torchvision_patch.apply_torchvision_patch()
+    print("[INFO] Torchvision patch applied")
+else:
+    print("[INFO] Torchvision patch SKIPPED (--no-patch flag)")
+
 import torch
 from transformers import AutoConfig, AutoModel, AutoTokenizer
 from PIL import Image
-import sys
-from pathlib import Path
 
 # Suppress informational warnings (optional - remove if you want to see all warnings)
 # Note: Some warnings appear during model loading (before this code runs) and cannot be suppressed here

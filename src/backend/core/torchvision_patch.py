@@ -70,5 +70,9 @@ def apply_torchvision_patch():
         print("[Torchvision Patch] Continuing without patch - torchvision may fail to import")
 
 
-# Auto-apply patch on import
-apply_torchvision_patch()
+# Patch is now optional - only apply if TORCHVISION_PATCH environment variable is set
+# This is only needed for PyTorch 2.7.0. PyTorch 2.8.0+ does NOT require this patch.
+# To enable: set environment variable TORCHVISION_PATCH=1 before importing
+import os
+if os.getenv("TORCHVISION_PATCH", "0") == "1":
+    apply_torchvision_patch()

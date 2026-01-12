@@ -29,7 +29,7 @@ A lightweight Python application for extracting text from visual novels and game
    (Windows: `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`)
 
 2. **Install all dependencies** using the installation script:
-   
+
    The installation script automatically detects your system and installs the appropriate dependencies:
    ```bash
    uv run python install.py
@@ -43,18 +43,18 @@ A lightweight Python application for extracting text from visual novels and game
    
    **What gets installed:**
    - Base dependencies from `pyproject.toml` (including opencv-python for RapidOCR)
-   - PyTorch (GPU with CUDA 12.8, or CPU version)
-   - Flash Attention 2.7.4 (GPU only, Windows prebuilt wheel via Hugging Face Hub)
+   - PyTorch 2.8.0 (GPU with CUDA 12.9, or CPU version)
+   - Flash Attention 2.8.2 (GPU only, Windows prebuilt wheel via Hugging Face Hub)
    - H2OVL-Mississippi dependencies (transformers, accelerate, timm, peft)
    - Kokoro TTS dependencies (kokoro, misaki[en], loguru, soundfile, sounddevice)
    - Spacy model (en-core-web-sm) for Kokoro TTS
    - RapidOCR (CPU via ONNX Runtime, for text detection)
    
-   **Requirements for GPU installation**: NVIDIA GPU with CUDA 12.8 support
+   **Requirements for GPU installation**: NVIDIA GPU with CUDA 12.9 support
    
    **Note**: The GPU installation is optional but recommended. The model runs on CPU by default but is significantly faster with a GPU. TTS works on both CPU and GPU.
    
-   **Important**: The install script handles a known compatibility issue between PyTorch 2.7.0 and torchvision 0.22.0 automatically via a runtime patch. This is required for Flash Attention compatibility.
+   **Important**: PyTorch 2.8.0 does NOT require the torchvision patch (unlike 2.7.0). If you're using an older version (PyTorch 2.7.0), you can enable the patch by setting the environment variable `TORCHVISION_PATCH=1`.
    
    **Features of the install script:**
    - Auto-detects GPU availability (or use `--gpu`/`--cpu` flags)
@@ -203,7 +203,7 @@ This runs the same hotkey functionality but prints results to console instead of
 - Make sure TTS is enabled in config.json: `"tts": {"enabled": true}`
 - Check console for TTS messages - first load may take a minute
 - Verify Kokoro is installed: `uv pip list | grep kokoro`
-- If you see torchvision errors, the runtime patch should handle it automatically
+- If you're using PyTorch 2.7.0 and see torchvision errors, enable the patch: `set TORCHVISION_PATCH=1` (Windows) or `export TORCHVISION_PATCH=1` (Linux/Mac) before running
 
 ### Import errors
 - Make sure you're using the virtual environment: `uv run python run_gui.py` or `uv run python run_cli.py`

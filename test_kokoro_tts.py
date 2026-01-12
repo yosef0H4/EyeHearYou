@@ -1,17 +1,33 @@
 """
 Test script for Kokoro TTS
 Tests the TTS model to verify installation and functionality
+
+Usage:
+    python test_kokoro_tts.py [--no-patch]
+    
+    --no-patch: Skip applying the torchvision compatibility patch
 """
-# CRITICAL: Apply torchvision patch BEFORE importing torch or anything that imports torch
+import argparse
 import sys
 from pathlib import Path
 import importlib.util
 
-# Import patch module directly without triggering __init__.py
-spec = importlib.util.spec_from_file_location("torchvision_patch", "src/backend/core/torchvision_patch.py")
-torchvision_patch = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(torchvision_patch)
-torchvision_patch.apply_torchvision_patch()
+# Parse arguments
+parser = argparse.ArgumentParser(description="Test Kokoro TTS installation")
+parser.add_argument("--no-patch", action="store_true", help="Skip applying torchvision compatibility patch")
+args = parser.parse_args()
+
+# CRITICAL: Apply torchvision patch BEFORE importing torch or anything that imports torch
+# (unless --no-patch is specified)
+if not args.no_patch:
+    # Import patch module directly without triggering __init__.py
+    spec = importlib.util.spec_from_file_location("torchvision_patch", "src/backend/core/torchvision_patch.py")
+    torchvision_patch = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(torchvision_patch)
+    torchvision_patch.apply_torchvision_patch()
+    print("[INFO] Torchvision patch applied")
+else:
+    print("[INFO] Torchvision patch SKIPPED (--no-patch flag)")
 
 import warnings
 # Suppress informational warnings

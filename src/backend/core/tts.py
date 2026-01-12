@@ -1,7 +1,11 @@
 """Text-to-Speech functionality using Kokoro"""
-# Apply torchvision patch BEFORE any torchvision imports (via kokoro/transformers)
-from .torchvision_patch import apply_torchvision_patch
-apply_torchvision_patch()
+# Torchvision patch is only needed for PyTorch 2.7.0
+# PyTorch 2.8.0+ does NOT require the patch
+# To enable patch for older versions, set environment variable: TORCHVISION_PATCH=1
+import os
+if os.getenv("TORCHVISION_PATCH", "0") == "1":
+    from .torchvision_patch import apply_torchvision_patch
+    apply_torchvision_patch()
 
 import threading
 import sounddevice as sd

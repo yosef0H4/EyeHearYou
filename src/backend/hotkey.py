@@ -109,7 +109,7 @@ def capture_and_update_state():
                     
                     # Trigger TTS (runs in background)
                     speak_text(extracted_text)
-
+                    
                     # Also print to console for visibility
                     print("\n" + "="*60)
                     print("EXTRACTED TEXT:")

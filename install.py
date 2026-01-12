@@ -98,17 +98,17 @@ def check_cuda():
 
 
 def install_pytorch_gpu():
-    """Install PyTorch 2.7.0 with CUDA 12.8"""
+    """Install PyTorch 2.8.0 with CUDA 12.9"""
     print("\n" + "="*60)
-    print("[1/5] Installing PyTorch 2.7.0 with CUDA 12.8...")
+    print("[1/5] Installing PyTorch 2.8.0 with CUDA 12.9...")
     print("="*60)
-    print("NOTE: torchvision 0.22.0 is required for PyTorch 2.7.0 (for Flash Attention compatibility)")
-    print("      A runtime patch handles the known compatibility issue automatically.")
+    print("NOTE: torchvision 0.23.0 is required for PyTorch 2.8.0")
+    print("      PyTorch 2.8.0 does NOT require the torchvision patch (unlike 2.7.0)")
     
     cmd = [
         "uv", "pip", "install",
-        "torch==2.7.0", "torchvision==0.22.0", "torchaudio==2.7.0",
-        "--index-url", "https://download.pytorch.org/whl/cu128"
+        "torch==2.8.0", "torchvision==0.23.0", "torchaudio==2.8.0",
+        "--index-url", "https://download.pytorch.org/whl/cu129"
     ]
     return run_command(cmd)
 
@@ -124,9 +124,9 @@ def install_pytorch_cpu():
 
 
 def install_flash_attention():
-    """Download and install Flash Attention 2.7.4 using huggingface_hub"""
+    """Download and install Flash Attention 2.8.2 using huggingface_hub"""
     print("\n" + "="*60)
-    print("[2/5] Installing Flash Attention 2.7.4 (Windows prebuilt wheel)...")
+    print("[2/5] Installing Flash Attention 2.8.2 (Windows prebuilt wheel)...")
     print("="*60)
     
     if sys.platform != "win32":
@@ -134,8 +134,8 @@ def install_flash_attention():
         print("         Skipping Flash Attention installation")
         return True
     
-    wheel_name = "flash_attn-2.7.4.post1+cu128torch2.7.0cxx11abiFALSE-cp312-cp312-win_amd64.whl"
-    repo_id = "lldacing/flash-attention-windows-wheel"
+    wheel_name = "flash_attn-2.8.2+cu129torch2.8.0cxx11abiTRUE-cp312-cp312-win_amd64.whl"
+    repo_id = "ussoewwin/Flash-Attention-2_for_Windows"
     
     temp_dir = Path(tempfile.gettempdir())
     wheel_path = temp_dir / wheel_name
@@ -450,8 +450,8 @@ Examples:
     print("Installation Complete!")
     print("="*60)
     if use_gpu:
-        print("\nNOTE: A runtime patch automatically handles torchvision compatibility")
-        print("      with PyTorch 2.7.0. This is required for Flash Attention 2.7.4 compatibility.")
+        print("\nNOTE: PyTorch 2.8.0 does NOT require the torchvision patch (unlike 2.7.0).")
+        print("      The patch is still available for backward compatibility if needed.")
     print("\nYou can now run the application:")
     print("  uv run python run_gui.py")
     print()
