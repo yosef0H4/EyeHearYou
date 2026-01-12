@@ -1,7 +1,7 @@
 """
 Standalone CLI entry point for OCR application
-Captures screenshots on Ctrl+Shift+Alt+Z and extracts text using OpenAI Vision API
-Uses text detection to only send text regions to the API, reducing costs
+Captures screenshots on Ctrl+Shift+Alt+Z and extracts text using local H2OVL model
+Uses text detection to only process text regions, improving efficiency
 
 This is the standalone CLI version (without the GUI).
 For the GUI, use run_gui.py instead.
@@ -34,7 +34,7 @@ def process_screenshot():
     
     print("Detecting text regions...")
     
-    # Extract text using Vision API (with region detection)
+    # Extract text using local H2OVL model (with region detection)
     extracted_text = extract_text_from_regions(screenshot, config)
     
     if extracted_text:
@@ -57,11 +57,10 @@ def main():
         load_config()
         return
     
-    # Load and validate config
+    # Load config
     config = load_config()
     
-    print(f"API URL: {config['api_url']}")
-    print(f"Model: {config['model']}")
+    print("Model: H2OVL-Mississippi-0.8B (Local)")
     print("\nPress Ctrl+Shift+Alt+Z to capture screenshot and extract text")
     print("Press Ctrl+C to exit")
     print("="*60)

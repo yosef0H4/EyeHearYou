@@ -13,20 +13,13 @@ def load_config():
         try:
             with open(CONFIG_FILE, "r", encoding="utf-8") as f:
                 config = json.load(f)
-                # Validate required fields
-                if not all(key in config for key in ["api_url", "api_key", "model"]):
-                    print("Error: config.json is missing required fields (api_url, api_key, model)")
-                    sys.exit(1)
                 return config
         except json.JSONDecodeError:
             print("Error: config.json is not valid JSON")
             sys.exit(1)
     else:
-        # Create default config template
+        # Create default config template (Local Model Version)
         default_config = {
-            "api_url": "http://localhost:1234/v1",
-            "api_key": "lm-studio",
-            "model": "gpt-4-vision-preview",
             "max_image_dimension": 1080,
             "reading_direction": "ltr",  # Legacy: "ltr" for Left-to-Right, "rtl" for Right-to-Left (Manga)
             "preprocessing": {
@@ -50,9 +43,8 @@ def load_config():
         }
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:
             json.dump(default_config, f, indent=4)
-        print(f"Created {CONFIG_FILE} with default LM Studio configuration.")
-        print("Please edit it with your API URL, key, and model.")
-        sys.exit(0)
+        print(f"Created {CONFIG_FILE} with default settings.")
+        return default_config
 
 
 

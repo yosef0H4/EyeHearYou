@@ -43,12 +43,12 @@ class OCRWorker(QThread):
             # Use processed image for detection and extraction
             image = processed_image
             
-            # Run detection (Cache is skipped to ensure preprocessing changes take effect)
+            # Run detection (with smart caching - only runs RapidOCR if preprocessing changed)
             self.progress_signal.emit("Detecting text regions...", 10)
             if self.is_cancelled:
                 return
             
-            raw_detections_with_scores = detect_text_regions_unfiltered(image)
+            raw_detections_with_scores = detect_text_regions_unfiltered(image, config=self.config, use_cache=True)
             
             if self.is_cancelled:
                 return

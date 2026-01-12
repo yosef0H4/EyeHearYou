@@ -60,8 +60,10 @@ class OCRWindow(QMainWindow):
         controls_layout.setSpacing(15)
         controls_layout.setContentsMargins(10, 10, 10, 10)
 
-        # 1. API Settings Group
-        self.create_api_group(controls_layout)
+        # 1. Model Info Label
+        model_info = QLabel("Model: H2OVL-Mississippi-0.8B (Local)")
+        model_info.setStyleSheet("font-weight: bold; color: #4CAF50; padding: 5px;")
+        controls_layout.addWidget(model_info)
 
         # 2. Image Adjustments Group (Consolidated)
         self.create_image_settings_group(controls_layout)
@@ -137,40 +139,6 @@ class OCRWindow(QMainWindow):
         # Apply dark theme
         self.apply_dark_theme()
 
-    def create_api_group(self, layout):
-        group = QGroupBox("API Settings")
-        g_layout = QVBoxLayout()
-
-        # API URL
-        url_layout = QHBoxLayout()
-        url_layout.addWidget(QLabel("API URL:"))
-        self.api_url_input = QLineEdit()
-        self.api_url_input.setText(self.config.get("api_url", "http://localhost:1234/v1"))
-        self.api_url_input.editingFinished.connect(self.update_api_config)
-        url_layout.addWidget(self.api_url_input)
-        g_layout.addLayout(url_layout)
-
-        # API Key
-        key_layout = QHBoxLayout()
-        key_layout.addWidget(QLabel("API Key:"))
-        self.api_key_input = QLineEdit()
-        self.api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
-        self.api_key_input.setText(self.config.get("api_key", "lm-studio"))
-        self.api_key_input.editingFinished.connect(self.update_api_config)
-        key_layout.addWidget(self.api_key_input)
-        g_layout.addLayout(key_layout)
-
-        # Model
-        model_layout = QHBoxLayout()
-        model_layout.addWidget(QLabel("Model:"))
-        self.model_input = QLineEdit()
-        self.model_input.setText(self.config.get("model", "gpt-4-vision-preview"))
-        self.model_input.editingFinished.connect(self.update_api_config)
-        model_layout.addWidget(self.model_input)
-        g_layout.addLayout(model_layout)
-
-        group.setLayout(g_layout)
-        layout.addWidget(group)
 
     def create_image_settings_group(self, layout):
         """Combined Image Settings (Size + Preprocessing)"""
@@ -561,12 +529,6 @@ class OCRWindow(QMainWindow):
         layout.addWidget(group)
 
 
-    def update_api_config(self):
-        """Update API config from input fields"""
-        self.config["api_url"] = self.api_url_input.text()
-        self.config["api_key"] = self.api_key_input.text()
-        self.config["model"] = self.model_input.text()
-        self.save_config()
 
     def save_and_refresh(self):
         """Save config and refresh detection if image exists"""

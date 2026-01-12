@@ -1,10 +1,10 @@
-"""Text extraction using Vision API"""
-from openai import OpenAI
-from .image_utils import resize_image_if_needed, image_to_base64
+"""Text extraction using Local H2OVL Model"""
+from .image_utils import resize_image_if_needed
 from .detection import detect_text_regions
 from .merging import merge_close_text_boxes
 from .debug import save_debug_images
 from .task_manager import task_manager
+from .model_loader import get_model
 
 
 def crop_text_regions(image, text_regions, padding=5):
@@ -30,85 +30,40 @@ def crop_text_regions(image, text_regions, padding=5):
     return cropped_images
 
 
-def extract_text_with_vision_api(image, config):
-    """Extract text from a single image using OpenAI Vision API"""
+def extract_text_with_local_model(image, config):
+    """Extract text from a single image using local H2OVL model"""
     # Check for cancellation before starting
     if task_manager.is_cancelled():
         return None
     
-    # Initialize OpenAI client with custom base URL
-    client = OpenAI(
-        api_key=config["api_key"],
-        base_url=config["api_url"]
-    )
-    
-    # Start with configured max dimension, but reduce if we hit context window errors
-    max_dimension = config.get("max_image_dimension", 1080)
-    original_image = image
-    retry_count = 0
-    max_retries = 3
-    
-    while retry_count <= max_retries:
-        if task_manager.is_cancelled():
-            return None
-        try:
-            # Resize image if too large to prevent context window overflow
-            current_image = resize_image_if_needed(original_image, max_dimension=max_dimension)
-            
-            # Convert image to base64
-            base64_image = image_to_base64(current_image)
-            
-            # Call Vision API
-            response = client.chat.completions.create(
-                model=config["model"],
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {
-                                "type": "text",
-                                "text": "Extract all text from this image. Return only the extracted text, no additional commentary."
-                            },
-                            {
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/png;base64,{base64_image}"
-                                }
-                            }
-                        ]
-                    }
-                ],
-                max_tokens=4096
-            )
-            
-            extracted_text = response.choices[0].message.content
-            return extracted_text
-            
-        except Exception as e:
-            error_str = str(e)
-            # Check if it's a context window error
-            if "context length" in error_str.lower() or "context overflow" in error_str.lower():
-                retry_count += 1
-                if retry_count <= max_retries:
-                    # Reduce max dimension by 25% and retry
-                    max_dimension = int(max_dimension * 0.75)
-                    print(f"Context window overflow detected. Retrying with smaller image size ({max_dimension}px max dimension)...")
-                    continue
-                else:
-                    print(f"Error: Failed after {max_retries} retries with reduced image sizes. Original error: {e}")
-                    return None
-            else:
-                # For other errors, don't retry
-                print(f"Error calling Vision API: {e}")
-                return None
-    
-    return None
+    try:
+        # Resize to prevent excessive VRAM usage if image is massive
+        # H2OVL handles dynamic resolutions well, but a safety cap is good
+        max_dimension = config.get("max_image_dimension", 1080)
+        current_image = resize_image_if_needed(image, max_dimension=max_dimension)
+        
+        # Get Singleton Model
+        model = get_model()
+        
+        # Run Inference
+        extracted_text = model.predict(current_image)
+        return extracted_text
+        
+    except Exception as e:
+        print(f"Error during inference: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
+# Alias for backwards compatibility with existing code
+extract_text_with_vision_api = extract_text_with_local_model
 
 
 def extract_text_from_regions(full_image, config):
     """
-    Extract text by first detecting text regions, then sending only those regions to the API.
-    This is more cost-effective than sending the full image.
+    Extract text by first detecting text regions, then processing only those regions with the local model.
+    This is more efficient than processing the full image.
     """
     # 1. Detection Phase
     task_manager.emit_status("Detecting text regions...", progress=10)
@@ -133,7 +88,7 @@ def extract_text_from_regions(full_image, config):
         # Fallback: if detection fails or no regions found, use full image
         task_manager.emit_status("No regions found, processing full image...", progress=20)
         print("No text regions detected or detection unavailable, using full image...")
-        return extract_text_with_vision_api(full_image, config)
+        return extract_text_with_local_model(full_image, config)
     
     print(f"Detected {len(text_regions)} text region(s), processing individually...")
     task_manager.emit_status(f"Detected {len(text_regions)} text region(s), processing individually...", progress=15)
@@ -160,25 +115,31 @@ def extract_text_from_regions(full_image, config):
     cropped_images = crop_text_regions(full_image, text_regions)
     if not cropped_images:
         print("No valid text regions to process, using full image...")
-        return extract_text_with_vision_api(full_image, config)
+        return extract_text_with_local_model(full_image, config)
     
     # Save debug images (merged boxes in blue, original boxes in green)
     save_debug_images(full_image, text_regions, cropped_images, is_merged=is_merged)
     
-    # 4. Extraction Phase
+    # 4. Extraction Phase (Sequential Inference)
     all_texts = []
     total_regions = len(cropped_images)
     
+    # Ensure model is loaded before loop to avoid lag on first item
+    task_manager.emit_status("Loading AI Model...", progress=25)
+    model = get_model()
+
     for i, cropped_img in enumerate(cropped_images):
         if task_manager.is_cancelled():
             print("Extraction cancelled during region processing.")
             return None
             
         progress = 30 + ((i / total_regions) * 70)  # Map 0-100% of regions to 30-100% total progress
-        task_manager.emit_status(f"Processing region {i+1}/{total_regions}...", progress=progress)
+        task_manager.emit_status(f"Reading region {i+1}/{total_regions}...", progress=progress)
         print(f"Processing region {i+1}/{total_regions}...")
         
-        text = extract_text_with_vision_api(cropped_img, config)
+        # Direct model call
+        text = model.predict(cropped_img)
+        
         if text and text.strip():
             all_texts.append(text.strip())
     

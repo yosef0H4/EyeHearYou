@@ -8,7 +8,6 @@ dependencies = [
     "keyboard>=0.13.5",
     "numpy>=1.24.0",
     "opencv-python>=4.8.0",
-    "openai>=2.15.0",
     "pillow>=12.1.0",
     "rapidocr-onnxruntime",
     "pygetwindow>=0.0.9",

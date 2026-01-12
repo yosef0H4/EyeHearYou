@@ -103,7 +103,7 @@ def detect_text_regions(image, min_width=30, min_height=30):
         return None
 
 
-def detect_text_regions_unfiltered(image):
+def detect_text_regions_unfiltered(image, config=None, use_cache=True):
     """
     Detect text regions in the image using RapidOCR, but return ALL detections
     (before size filtering).
@@ -114,6 +114,8 @@ def detect_text_regions_unfiltered(image):
     
     Args:
         image: PIL Image to process
+        config: Optional config dict (needed for cache key generation)
+        use_cache: Whether to check cache before running RapidOCR
     
     Returns:
         List of tuples: ((x1, y1, x2, y2), confidence_score) for all valid detections.
@@ -124,6 +126,19 @@ def detect_text_regions_unfiltered(image):
     
     if not RAPIDOCR_AVAILABLE:
         return None
+    
+    # Try to use cache if available
+    if use_cache and config:
+        from src.backend.state import state
+        from src.backend.core.preprocessing import get_preprocessing_hash
+        
+        preproc_hash = get_preprocessing_hash(config)
+        cache_key = (state.screenshot_version, preproc_hash)
+        
+        if cache_key in state.cached_raw_detections:
+            cached = state.cached_raw_detections[cache_key]
+            print(f"Using cached raw detections ({len(cached)} regions)")
+            return cached
     
     try:
         print("Using RapidOCR for text detection (CPU via ONNX Runtime)...")
@@ -166,6 +181,15 @@ def detect_text_regions_unfiltered(image):
         
         if detections_with_scores:
             print(f"Detected {len(detections_with_scores)} raw text regions (unfiltered, will be filtered by size)")
+        
+        # Cache the results if config is provided
+        if config:
+            from src.backend.state import state
+            from src.backend.core.preprocessing import get_preprocessing_hash
+            
+            preproc_hash = get_preprocessing_hash(config)
+            cache_key = (state.screenshot_version, preproc_hash)
+            state.cached_raw_detections[cache_key] = detections_with_scores
         
         # Return as list of ((x1, y1, x2, y2), score) tuples
         return detections_with_scores

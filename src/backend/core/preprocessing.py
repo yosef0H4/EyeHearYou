@@ -2,6 +2,39 @@
 import numpy as np
 import cv2
 from PIL import Image
+import hashlib
+import json
+
+
+def get_preprocessing_hash(config):
+    """
+    Generate a hash of preprocessing settings to use as cache key.
+    This allows us to cache raw detections per preprocessing configuration.
+    
+    Only includes settings that affect the image BEFORE detection runs.
+    
+    Args:
+        config: Full config dict
+    
+    Returns:
+        str: Hash of preprocessing settings
+    """
+    settings = config.get("preprocessing", {})
+    
+    # Create a dict with all preprocessing-related settings that affect the image
+    # Note: max_image_dimension is NOT included because it's only used during extraction,
+    # not during detection/preprocessing
+    preproc_dict = {
+        "binary_threshold": settings.get("binary_threshold", 0),
+        "invert": settings.get("invert", False),
+        "dilation": settings.get("dilation", 0),
+        "contrast": settings.get("contrast", 1.0),
+        "brightness": settings.get("brightness", 0)
+    }
+    
+    # Convert to JSON string and hash it
+    preproc_json = json.dumps(preproc_dict, sort_keys=True)
+    return hashlib.md5(preproc_json.encode()).hexdigest()
 
 
 def process_image(pil_image, config):
