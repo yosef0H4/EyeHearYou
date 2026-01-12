@@ -80,7 +80,7 @@ class OCRWorker(QThread):
             self.progress_signal.emit("Applying size filter...", 20)
             min_width_ratio = td_config.get("min_width_ratio", 0.0)
             min_height_ratio = td_config.get("min_height_ratio", 0.0)
-            median_height_fraction = td_config.get("median_height_fraction", 0.4)
+            median_height_fraction = td_config.get("median_height_fraction", 1.0)
             
             size_filtered = filter_text_regions(
                 all_boxes,
@@ -102,7 +102,7 @@ class OCRWorker(QThread):
                 group_tol = 0.8
             else:
                 direction = sort_config.get("direction", "horizontal_ltr")
-                group_tol = sort_config.get("group_tolerance", 0.8)
+                group_tol = sort_config.get("group_tolerance", 0.5)
             
             # Step 3: Sort by reading order (Initial sort)
             regions = sort_text_regions_by_reading_order(
@@ -130,9 +130,9 @@ class OCRWorker(QThread):
                 return
 
             # Use adaptive ratios only
-            merge_vertical_ratio = td_config.get("merge_vertical_ratio", 0.5)
-            merge_horizontal_ratio = td_config.get("merge_horizontal_ratio", 1.5)
-            merge_width_ratio_threshold = td_config.get("merge_width_ratio_threshold", 0.3)
+            merge_vertical_ratio = td_config.get("merge_vertical_ratio", 0.07)
+            merge_horizontal_ratio = td_config.get("merge_horizontal_ratio", 0.37)
+            merge_width_ratio_threshold = td_config.get("merge_width_ratio_threshold", 0.75)
             
             merged_regions, is_merged, original_groups = merge_close_text_boxes(
                 regions,

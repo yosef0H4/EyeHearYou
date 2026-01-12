@@ -75,7 +75,7 @@ def process_screenshot_detect():
     regions = detect_text_regions(screenshot, 
                                 min_width_ratio=td_config.get("min_width_ratio", 0.0),
                                 min_height_ratio=td_config.get("min_height_ratio", 0.0),
-                                median_height_fraction=td_config.get("median_height_fraction", 0.4))
+                                median_height_fraction=td_config.get("median_height_fraction", 1.0))
     
     if regions:
         print(f"✓ Found {len(regions)} text regions.")

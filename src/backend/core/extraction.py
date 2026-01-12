@@ -81,7 +81,7 @@ def extract_text_from_regions(full_image, config, on_text_found=None):
     # Use adaptive parameters only
     min_width_ratio = text_detection_config.get("min_width_ratio", 0.0)
     min_height_ratio = text_detection_config.get("min_height_ratio", 0.0)
-    median_height_fraction = text_detection_config.get("median_height_fraction", 0.4)
+    median_height_fraction = text_detection_config.get("median_height_fraction", 1.0)
     
     # Try to detect text regions first
     # Note: min_confidence is not used since RapidOCR doesn't provide confidence scores in detection-only mode
@@ -110,9 +110,9 @@ def extract_text_from_regions(full_image, config, on_text_found=None):
     
     # Merge close text boxes (like split dialogue lines)
     # Use adaptive ratios only
-    merge_vertical_ratio = text_detection_config.get("merge_vertical_ratio", 0.5)
-    merge_horizontal_ratio = text_detection_config.get("merge_horizontal_ratio", 1.5)
-    merge_width_ratio_threshold = text_detection_config.get("merge_width_ratio_threshold", 0.3)
+    merge_vertical_ratio = text_detection_config.get("merge_vertical_ratio", 0.07)
+    merge_horizontal_ratio = text_detection_config.get("merge_horizontal_ratio", 0.37)
+    merge_width_ratio_threshold = text_detection_config.get("merge_width_ratio_threshold", 0.75)
     
     text_regions, is_merged, _ = merge_close_text_boxes(
         text_regions,

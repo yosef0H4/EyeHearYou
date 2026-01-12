@@ -57,21 +57,24 @@ def load_config():
                         del td["merge_horizontal_tolerance"]
                         updated = True
                     
-                    # Add adaptive parameters if missing
+                    # Add adaptive parameters if missing (using optimized defaults)
                     if "min_height_ratio" not in td:
-                        td["min_height_ratio"] = 0.01
+                        td["min_height_ratio"] = 0.031
                         updated = True
                     if "min_width_ratio" not in td:
                         td["min_width_ratio"] = 0.0
                         updated = True
                     if "median_height_fraction" not in td:
-                        td["median_height_fraction"] = 0.4
+                        td["median_height_fraction"] = 1.0
                         updated = True
                     if "merge_vertical_ratio" not in td:
-                        td["merge_vertical_ratio"] = 0.5
+                        td["merge_vertical_ratio"] = 0.07
                         updated = True
                     if "merge_horizontal_ratio" not in td:
-                        td["merge_horizontal_ratio"] = 1.5
+                        td["merge_horizontal_ratio"] = 0.37
+                        updated = True
+                    if "merge_width_ratio_threshold" not in td:
+                        td["merge_width_ratio_threshold"] = 0.75
                         updated = True
                     
                     if updated:
@@ -100,16 +103,17 @@ def load_config():
             },
             "text_detection": {
                 # Adaptive parameters (works across all screen sizes and font sizes)
-                "min_height_ratio": 0.01,       # Box must be at least 1% of screen height
+                # Optimized defaults based on testing with various games
+                "min_height_ratio": 0.031,      # Box must be at least 3.1% of screen height
                 "min_width_ratio": 0.0,          # Minimum width as fraction of screen width (0.0 = disabled)
-                "median_height_fraction": 0.4,   # Discard if < 40% of median text size (removes noise)
-                "merge_vertical_ratio": 0.5,     # Merge lines if gap < 0.5x text height
-                "merge_horizontal_ratio": 1.5,  # Merge words if gap < 1.5x text height
-                "merge_width_ratio_threshold": 0.3
+                "median_height_fraction": 1.0,   # Discard if < 100% of median text size (less aggressive noise filtering)
+                "merge_vertical_ratio": 0.07,     # Merge lines if gap < 0.07x text height (tight vertical merging)
+                "merge_horizontal_ratio": 0.37,  # Merge words if gap < 0.37x text height (tight horizontal merging)
+                "merge_width_ratio_threshold": 0.75  # Minimum horizontal overlap for vertical merging
             },
             "text_sorting": {
                 "direction": "horizontal_ltr",  # Options: horizontal_ltr, horizontal_rtl, vertical_ltr, vertical_rtl
-                "group_tolerance": 0.8          # Multiplier for line/column grouping (0.1-2.0)
+                "group_tolerance": 0.5          # Multiplier for line/column grouping (0.1-2.0)
             }
         }
         with open(CONFIG_FILE, "w", encoding="utf-8") as f:

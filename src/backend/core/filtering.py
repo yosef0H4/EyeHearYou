@@ -2,7 +2,7 @@
 import numpy as np
 
 
-def sort_text_regions_by_reading_order(text_regions, direction='horizontal_ltr', group_tolerance=0.8):
+def sort_text_regions_by_reading_order(text_regions, direction='horizontal_ltr', group_tolerance=0.5):
     """
     Sort text regions by reading order with configurable direction.
     

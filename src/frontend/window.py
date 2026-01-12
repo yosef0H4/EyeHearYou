@@ -36,16 +36,17 @@ class OCRWindow(QMainWindow):
         },
         "text_detection": {
             # Adaptive parameters (works across all screen sizes and font sizes)
-            "min_height_ratio": 0.01,
+            # Optimized defaults based on testing with various games
+            "min_height_ratio": 0.031,
             "min_width_ratio": 0.0,
-            "median_height_fraction": 0.4,
-            "merge_vertical_ratio": 0.5,
-            "merge_horizontal_ratio": 1.5,
-            "merge_width_ratio_threshold": 0.3
+            "median_height_fraction": 1.0,
+            "merge_vertical_ratio": 0.07,
+            "merge_horizontal_ratio": 0.37,
+            "merge_width_ratio_threshold": 0.75
         },
         "text_sorting": {
             "direction": "horizontal_ltr",
-            "group_tolerance": 0.8
+            "group_tolerance": 0.5
         }
     }
 
@@ -438,7 +439,7 @@ class OCRWindow(QMainWindow):
         def update_viz_detection():
             # For visualization, estimate pixels from ratios (assume 1920x1080 screen)
             # This is just for the visualizer widget, actual filtering uses ratios
-            min_h_ratio = self.config["text_detection"].get("min_height_ratio", 0.01)
+            min_h_ratio = self.config["text_detection"].get("min_height_ratio", 0.031)
             h = int(1080 * min_h_ratio)  # Estimate for visualization
             w = h  # Use same for width
             self.settings_viz.update_detection(w, h)
@@ -449,10 +450,10 @@ class OCRWindow(QMainWindow):
         h_ratio_row.addWidget(QLabel("Min Height Ratio:"))
         h_ratio_sl = QSlider(Qt.Orientation.Horizontal)
         h_ratio_sl.setRange(0, 50)  # 0% to 5% of screen height
-        h_ratio_val = td_config.get("min_height_ratio", 0.01)
+        h_ratio_val = td_config.get("min_height_ratio", 0.031)
         h_ratio_sl.setValue(int(h_ratio_val * 1000))  # Convert to per-mille
         h_ratio_sp = QDoubleSpinBox()
-        h_ratio_sp.setRange(0.0, 0.05)
+        h_ratio_sp.setRange(-999999.0, 999999.0)  # Allow any value
         h_ratio_sp.setSingleStep(0.001)
         h_ratio_sp.setValue(h_ratio_val)
         h_ratio_sp.setSuffix(" %")
@@ -462,7 +463,9 @@ class OCRWindow(QMainWindow):
             real_val = v / 1000.0 if isinstance(v, int) else v
             if "text_detection" not in self.config: self.config["text_detection"] = {}
             self.config["text_detection"]["min_height_ratio"] = real_val
-            h_ratio_sl.blockSignals(True); h_ratio_sl.setValue(int(real_val * 1000)); h_ratio_sl.blockSignals(False)
+            # Only update slider if value is within slider range, otherwise just update config
+            if 0 <= real_val <= 0.05:
+                h_ratio_sl.blockSignals(True); h_ratio_sl.setValue(int(real_val * 1000)); h_ratio_sl.blockSignals(False)
             h_ratio_sp.blockSignals(True); h_ratio_sp.setValue(real_val); h_ratio_sp.blockSignals(False)
             update_viz_detection()
             self.preview_live_filtering()
@@ -473,7 +476,7 @@ class OCRWindow(QMainWindow):
         h_ratio_sp.editingFinished.connect(self.finalize_live_preview)
         
         def reset_h_ratio():
-            default_val = self.DEFAULT_CONFIG["text_detection"].get("min_height_ratio", 0.01)
+            default_val = self.DEFAULT_CONFIG["text_detection"].get("min_height_ratio", 0.031)
             h_ratio_sl.setValue(int(default_val * 1000))
             h_ratio_sp.setValue(default_val)
             on_h_ratio_change(default_val)
@@ -488,10 +491,10 @@ class OCRWindow(QMainWindow):
         median_row.addWidget(QLabel("Noise Filter:"))
         median_sl = QSlider(Qt.Orientation.Horizontal)
         median_sl.setRange(10, 100)  # 0.1 to 1.0
-        median_val = td_config.get("median_height_fraction", 0.4)
+        median_val = td_config.get("median_height_fraction", 1.0)
         median_sl.setValue(int(median_val * 100))
         median_sp = QDoubleSpinBox()
-        median_sp.setRange(0.1, 1.0)
+        median_sp.setRange(-999999.0, 999999.0)  # Allow any value
         median_sp.setSingleStep(0.05)
         median_sp.setValue(median_val)
         median_sp.setMaximumWidth(70)
@@ -500,7 +503,9 @@ class OCRWindow(QMainWindow):
             real_val = v / 100.0 if isinstance(v, int) else v
             if "text_detection" not in self.config: self.config["text_detection"] = {}
             self.config["text_detection"]["median_height_fraction"] = real_val
-            median_sl.blockSignals(True); median_sl.setValue(int(real_val * 100)); median_sl.blockSignals(False)
+            # Only update slider if value is within slider range, otherwise just update config
+            if 0.1 <= real_val <= 1.0:
+                median_sl.blockSignals(True); median_sl.setValue(int(real_val * 100)); median_sl.blockSignals(False)
             median_sp.blockSignals(True); median_sp.setValue(real_val); median_sp.blockSignals(False)
             self.preview_live_filtering()
         
@@ -510,7 +515,7 @@ class OCRWindow(QMainWindow):
         median_sp.editingFinished.connect(self.finalize_live_preview)
         
         def reset_median():
-            default_val = self.DEFAULT_CONFIG["text_detection"].get("median_height_fraction", 0.4)
+            default_val = self.DEFAULT_CONFIG["text_detection"].get("median_height_fraction", 1.0)
             median_sl.setValue(int(default_val * 100))
             median_sp.setValue(default_val)
             on_median_change(default_val)
@@ -533,7 +538,7 @@ class OCRWindow(QMainWindow):
             # Migrate from legacy reading_direction
             legacy_dir = self.config.get("reading_direction", "ltr")
             self.config["text_sorting"]["direction"] = "horizontal_ltr" if legacy_dir == "ltr" else "horizontal_rtl"
-            self.config["text_sorting"]["group_tolerance"] = 0.8
+            self.config["text_sorting"]["group_tolerance"] = 0.5
             sort_config = self.config["text_sorting"]
         dir_row = QHBoxLayout()
         dir_row.setSpacing(8)
@@ -565,9 +570,9 @@ class OCRWindow(QMainWindow):
         # Viz Update Logic for Merge (uses ratios now)
         def update_viz_merge():
             # For visualization, estimate pixel values from ratios (assume 20px text height)
-            v_ratio = self.config["text_detection"].get("merge_vertical_ratio", 0.5)
-            h_ratio = self.config["text_detection"].get("merge_horizontal_ratio", 1.5)
-            rat = self.config["text_detection"].get("merge_width_ratio_threshold", 0.3)
+            v_ratio = self.config["text_detection"].get("merge_vertical_ratio", 0.07)
+            h_ratio = self.config["text_detection"].get("merge_horizontal_ratio", 0.37)
+            rat = self.config["text_detection"].get("merge_width_ratio_threshold", 0.75)
             # Estimate pixels for visualization (assume 20px text height)
             vt = int(v_ratio * 20)
             ht = int(h_ratio * 20)
@@ -588,7 +593,7 @@ class OCRWindow(QMainWindow):
             sl.setValue(int(val * 100))
             
             sp = QDoubleSpinBox()
-            sp.setRange(0.0, max_val)
+            sp.setRange(-999999.0, 999999.0)  # Allow any value
             sp.setSingleStep(0.1)
             sp.setValue(val)
             sp.setSuffix("x")
@@ -599,7 +604,9 @@ class OCRWindow(QMainWindow):
                 if "text_detection" not in self.config: self.config["text_detection"] = {}
                 self.config["text_detection"][key] = real_val
                 
-                sl.blockSignals(True); sl.setValue(int(real_val * 100)); sl.blockSignals(False)
+                # Only update slider if value is within slider range, otherwise just update config
+                if 0.0 <= real_val <= max_val:
+                    sl.blockSignals(True); sl.setValue(int(real_val * 100)); sl.blockSignals(False)
                 sp.blockSignals(True); sp.setValue(real_val); sp.blockSignals(False)
                 
                 update_viz_merge()
@@ -622,11 +629,11 @@ class OCRWindow(QMainWindow):
             row.addWidget(reset_btn)
             g_layout.addLayout(row)
 
-        add_merge_ratio_slider("V. Ratio:", "merge_vertical_ratio", 0.5, max_val=2.0, 
-                              tooltip="Vertical gap as multiplier of text height (e.g., 0.5 = half a line)")
-        add_merge_ratio_slider("H. Ratio:", "merge_horizontal_ratio", 1.5, max_val=5.0,
-                              tooltip="Horizontal gap as multiplier of text height (e.g., 1.5 = 1.5x line height)")
-        add_merge_ratio_slider("Width Ratio:", "merge_width_ratio_threshold", 0.3, max_val=1.0,
+        add_merge_ratio_slider("V. Ratio:", "merge_vertical_ratio", 0.07, max_val=2.0, 
+                              tooltip="Vertical gap as multiplier of text height (e.g., 0.07 = tight vertical merging)")
+        add_merge_ratio_slider("H. Ratio:", "merge_horizontal_ratio", 0.37, max_val=5.0,
+                              tooltip="Horizontal gap as multiplier of text height (e.g., 0.37 = tight horizontal merging)")
+        add_merge_ratio_slider("Width Ratio:", "merge_width_ratio_threshold", 0.75, max_val=1.0,
                               tooltip="Minimum horizontal overlap ratio for vertical merging")
 
         # Line Grouping (Sorting)
@@ -635,7 +642,7 @@ class OCRWindow(QMainWindow):
         grp_row.addWidget(QLabel("Line Grouping:"))
         g_sl = QSlider(Qt.Orientation.Horizontal)
         g_sl.setRange(1, 20)
-        grp_val = sort_config.get("group_tolerance", 0.8)
+        grp_val = sort_config.get("group_tolerance", 0.5)
         g_sl.setValue(int(grp_val * 10))
         g_sp = QDoubleSpinBox()
         g_sp.setRange(0.1, 2.0)
@@ -649,7 +656,9 @@ class OCRWindow(QMainWindow):
             if "text_sorting" not in self.config: self.config["text_sorting"] = {}
             self.config["text_sorting"]["group_tolerance"] = real_val
             
-            g_sl.blockSignals(True); g_sl.setValue(int(real_val*10)); g_sl.blockSignals(False)
+            # Only update slider if value is within slider range, otherwise just update config
+            if 0.1 <= real_val <= 2.0:
+                g_sl.blockSignals(True); g_sl.setValue(int(real_val*10)); g_sl.blockSignals(False)
             g_sp.blockSignals(True); g_sp.setValue(real_val); g_sp.blockSignals(False)
             self.preview_live_merging()
             
@@ -660,7 +669,7 @@ class OCRWindow(QMainWindow):
         
         # Reset button
         def reset_grp():
-            default_val = self.DEFAULT_CONFIG["text_sorting"].get("group_tolerance", 0.8)
+            default_val = self.DEFAULT_CONFIG["text_sorting"].get("group_tolerance", 0.5)
             g_sl.setValue(int(default_val * 10))
             g_sp.setValue(default_val)
             on_grp_change(default_val)
@@ -854,7 +863,7 @@ class OCRWindow(QMainWindow):
         # Use adaptive parameters only
         td_config = self.config.get("text_detection", {})
         min_height_ratio = td_config.get("min_height_ratio", 0.0)
-        median_height_fraction = td_config.get("median_height_fraction", 0.4)
+        median_height_fraction = td_config.get("median_height_fraction", 1.0)
         min_width_ratio = td_config.get("min_width_ratio", 0.0)
         
         # Calculate median height for adaptive filtering
@@ -908,7 +917,7 @@ class OCRWindow(QMainWindow):
         
         min_width_ratio = td_config.get("min_width_ratio", 0.0)
         min_height_ratio = td_config.get("min_height_ratio", 0.0)
-        median_height_fraction = td_config.get("median_height_fraction", 0.4)
+        median_height_fraction = td_config.get("median_height_fraction", 1.0)
         
         filtered = filter_text_regions(self.raw_boxes, (img_h, img_w), 
                                       min_width_ratio=min_width_ratio,
@@ -918,16 +927,16 @@ class OCRWindow(QMainWindow):
         # 2. Local Sorting
         sort_config = self.config.get("text_sorting", {})
         direction = sort_config.get("direction", "horizontal_ltr")
-        group_tol = sort_config.get("group_tolerance", 0.8)
+        group_tol = sort_config.get("group_tolerance", 0.5)
         
         sorted_regions = sort_text_regions_by_reading_order(
             filtered, direction=direction, group_tolerance=group_tol
         )
         
         # 3. Local Merging using adaptive ratios only
-        merge_vertical_ratio = td_config.get("merge_vertical_ratio", 0.5)
-        merge_horizontal_ratio = td_config.get("merge_horizontal_ratio", 1.5)
-        merge_width_ratio_threshold = td_config.get("merge_width_ratio_threshold", 0.3)
+        merge_vertical_ratio = td_config.get("merge_vertical_ratio", 0.07)
+        merge_horizontal_ratio = td_config.get("merge_horizontal_ratio", 0.37)
+        merge_width_ratio_threshold = td_config.get("merge_width_ratio_threshold", 0.75)
         
         merged, is_merged_flags, original_groups = merge_close_text_boxes(
             sorted_regions,
@@ -1073,8 +1082,8 @@ class OCRWindow(QMainWindow):
         """Draw yellow tolerance zones around original boxes"""
         td_config = self.config.get("text_detection", {})
         # Use adaptive ratios, estimate pixels for visualization (assume 20px text height)
-        v_ratio = td_config.get("merge_vertical_ratio", 0.5)
-        h_ratio = td_config.get("merge_horizontal_ratio", 1.5)
+        v_ratio = td_config.get("merge_vertical_ratio", 0.07)
+        h_ratio = td_config.get("merge_horizontal_ratio", 0.37)
         # Estimate pixels for visualization (assume average text height of 20px)
         v_tol = int(v_ratio * 20)
         h_tol = int(h_ratio * 20)
@@ -1109,7 +1118,7 @@ class OCRWindow(QMainWindow):
         This helps users understand how much vertical alignment/overlap is required.
         The bar represents the minimum horizontal overlap needed for vertical merging.
         """
-        ratio = self.config["text_detection"].get("merge_width_ratio_threshold", 0.3)
+        ratio = self.config["text_detection"].get("merge_width_ratio_threshold", 0.75)
         
         # Cyan pen/brush - semi-transparent for visibility
         brush = QBrush(QColor(0, 255, 255, 120))  # Cyan, semi-transparent
@@ -1155,7 +1164,7 @@ class OCRWindow(QMainWindow):
         
         sort_config = self.config.get("text_sorting", {})
         direction = sort_config.get("direction", "horizontal_ltr")
-        group_tol = sort_config.get("group_tolerance", 0.8)
+        group_tol = sort_config.get("group_tolerance", 0.5)
         
         # 1. Draw Flow Path (Connecting centers with arrows)
         path_pen = QPen(QColor(255, 0, 255), 2)  # Magenta/Purple
