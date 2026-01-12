@@ -7,10 +7,10 @@ A lightweight Python application for extracting text from visual novels and game
 - **One-Key Extraction**: Press `Ctrl+Shift+Alt+Z` to automatically capture, detect, extract, and copy text to clipboard
 - **Desktop GUI**: Visual interface to fine-tune detection and merge settings with live preview
 - **Backend-Authoritative**: All detection/merging logic runs in Python for consistency between preview and extraction
-- **Smart Text Detection**: Uses RapidOCR to detect text regions, then sends only cropped regions to Vision API (reduces costs by 90%+)
+- **Smart Text Detection**: Uses RapidOCR to detect text regions, then processes only cropped regions with the local H2OVL model (faster and more accurate)
 - **Auto-Merge Dialogue**: Automatically merges split dialogue lines with configurable tolerances
 - **CPU-Based Detection**: RapidOCR runs on CPU via ONNX Runtime (no GPU conflicts with PyTorch)
-- **OpenAI-Compatible**: Works with LM Studio, OpenAI API, or any OpenAI-compatible endpoint
+- **Local AI Model**: Uses H2OVL-Mississippi-0.8B running locally - no API keys or internet required
 - **Real-Time Preview**: See detection boxes and merged regions update live as you adjust settings
 - **Auto-Refresh UI**: UI automatically reflects results when using hotkey - no manual button presses needed
 
@@ -36,11 +36,11 @@ A lightweight Python application for extracting text from visual novels and game
    uv pip install rapidocr-onnxruntime
    ```
    
-   **Note**: RapidOCR runs on CPU via ONNX Runtime and doesn't require GPU or CUDA. It's lightweight and doesn't conflict with PyTorch dependencies. If RapidOCR is not installed, the app will process the full image instead of detecting text regions.
+   **Note**: RapidOCR runs on CPU via ONNX Runtime and doesn't require GPU or CUDA. It's lightweight and doesn't conflict with PyTorch dependencies. RapidOCR is required for text detection - the app will not run without it.
 
 4. **Optional: Install GPU support for H2OVL-Mississippi OCR model**:
    
-   If you want to use the H2OVL-Mississippi-0.8B model for OCR (instead of API-based OCR), run:
+   For faster OCR performance, install GPU support:
    ```bash
    install-gpu.bat
    ```
@@ -52,34 +52,36 @@ A lightweight Python application for extracting text from visual novels and game
    
    **Requirements**: NVIDIA GPU with CUDA 12.8 support
    
-   **Note**: The GPU installation is optional. The default OCR uses API-based extraction (OpenAI, LM Studio, etc.) which doesn't require GPU.
+   **Note**: The GPU installation is optional but recommended. The model runs on CPU by default but is significantly faster with a GPU.
 
 ## Configuration
 
-Edit `config.json` to set your API settings:
+The application creates a `config.json` file automatically. You can edit this file or use the GUI to adjust settings.
 
 ```json
 {
-    "api_url": "http://localhost:1234/v1",
-    "api_key": "lm-studio",
-    "model": "gpt-4-vision-preview"
+    "max_image_dimension": 1080,
+    "preprocessing": {
+        "binary_threshold": 0,
+        "invert": false,
+        "dilation": 0,
+        "contrast": 1.0,
+        "brightness": 0
+    },
+    "text_detection": {
+        "min_width": 30,
+        "min_height": 30,
+        "merge_vertical_tolerance": 30,
+        "merge_horizontal_tolerance": 50,
+        "merge_width_ratio_threshold": 0.3
+    }
 }
 ```
 
-### For LM Studio:
-- **api_url**: Usually `http://localhost:1234/v1` (default LM Studio port)
-- **api_key**: Can be any string (e.g., `lm-studio`)
-- **model**: The model name you're using in LM Studio (must support vision)
-
-### For OpenAI:
-- **api_url**: `https://api.openai.com/v1`
-- **api_key**: Your OpenAI API key
-- **model**: `gpt-4-vision-preview` or `gpt-4o`
-
-### For Other OpenAI-Compatible APIs:
-- Set the **api_url** to your API endpoint
-- Set the **api_key** as required by your provider
-- Set the **model** to a vision-capable model name
+### Settings Guide:
+- **max_image_dimension**: Downscales large images to fit model context (default: 1080)
+- **preprocessing**: Image adjustments before detection (useful for difficult backgrounds)
+- **text_detection**: Controls how text is detected and merged into lines
 
 ## Quick Start
 
@@ -163,7 +165,7 @@ This runs the same hotkey functionality but prints results to console instead of
 
 - **Windows**: The `keyboard` library requires administrator privileges for global hotkeys
 - **Screenshot**: Captures only the active window (not the full screen)
-- **API Compatibility**: Works with any OpenAI-compatible API endpoint
+- **Local Processing**: All OCR processing happens locally - no internet connection or API keys required
 - **Clipboard**: Requires `pyperclip` package (included in dependencies) or falls back to system-specific methods
 
 ## Troubleshooting
@@ -172,10 +174,9 @@ This runs the same hotkey functionality but prints results to console instead of
 - On Windows, run as administrator
 - Make sure no other application is using the same hotkey
 
-### API errors
-- Verify your `config.json` settings
-- Check that your API endpoint is running (for LM Studio)
-- Ensure the model supports vision capabilities
+### Model loading is slow
+- The first run downloads the model (~1.6GB) and may take time
+- CPU inference is slower than GPU; consider installing CUDA support if you have an NVIDIA card
 
 ### Import errors
 - Make sure you're using the virtual environment: `uv run python run_gui.py` or `uv run python run_cli.py`
@@ -183,5 +184,5 @@ This runs the same hotkey functionality but prints results to console instead of
 
 ### RapidOCR issues
 - RapidOCR runs on CPU via ONNX Runtime - no GPU configuration needed
-- If RapidOCR is not installed, the app will process the full image instead of detecting text regions
+- RapidOCR is required - install it with: `uv pip install rapidocr-onnxruntime`
 - Verify installation: `python -c "from rapidocr_onnxruntime import RapidOCR; print('RapidOCR installed successfully')"`
