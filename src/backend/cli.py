@@ -16,6 +16,7 @@ from .core import (
     CONFIG_FILE,
     capture_screenshot,
     extract_text_from_regions,
+    detect_text_regions,
 )
 from .core.model_loader import preload_model
 
@@ -48,6 +49,28 @@ def process_screenshot():
         print("Failed to extract text from screenshot.")
 
 
+def process_screenshot_detect():
+    """Capture screenshot and run detection only (Ctrl+Shift+Alt+X)"""
+    print("\n" + "="*60)
+    print("Capturing active window (Detection Only)...")
+    
+    config = load_config()
+    screenshot = capture_screenshot()
+    if screenshot is None:
+        return
+    
+    print("Detecting text regions...")
+    regions = detect_text_regions(screenshot, 
+                                min_width=config["text_detection"]["min_width"],
+                                min_height=config["text_detection"]["min_height"])
+    
+    if regions:
+        print(f"✓ Found {len(regions)} text regions.")
+        print("For full extraction, press Ctrl+Shift+Alt+Z")
+    else:
+        print("No text regions detected.")
+
+
 def main():
     """Main entry point"""
     print("Screenshot OCR Application")
@@ -67,13 +90,16 @@ def main():
     # Preload and test the model
     preload_model(test=True)
     
-    print("\nPress Ctrl+Shift+Alt+Z to capture screenshot and extract text")
+    print("\nHotkeys:")
+    print("  Ctrl+Shift+Alt+Z : Capture + Extract Text")
+    print("  Ctrl+Shift+Alt+X : Capture + Detect Only")
     print("Press Ctrl+C to exit")
     print("="*60)
     
     # Register hotkey
     try:
         keyboard.add_hotkey("ctrl+shift+alt+z", process_screenshot)
+        keyboard.add_hotkey("ctrl+shift+alt+x", process_screenshot_detect)
         
         # Keep the program running
         keyboard.wait()

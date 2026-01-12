@@ -35,7 +35,7 @@ class OCRWindow(QMainWindow):
         "text_detection": {
             "min_width": 30,
             "min_height": 30,
-            "merge_vertical_tolerance": 30,
+            "merge_vertical_tolerance": 4,
             "merge_horizontal_tolerance": 50,
             "merge_width_ratio_threshold": 0.3
         },
@@ -541,7 +541,7 @@ class OCRWindow(QMainWindow):
 
         # Viz Update Logic for Merge
         def update_viz_merge():
-            vt = self.config["text_detection"].get("merge_vertical_tolerance", 30)
+            vt = self.config["text_detection"].get("merge_vertical_tolerance", 4)
             ht = self.config["text_detection"].get("merge_horizontal_tolerance", 50)
             rat = self.config["text_detection"].get("merge_width_ratio_threshold", 0.3)
             self.settings_viz.update_merge(vt, ht, rat)
@@ -613,7 +613,7 @@ class OCRWindow(QMainWindow):
             row.addWidget(reset_btn)
             g_layout.addLayout(row)
 
-        add_merge_slider("V. Tolerance:", "merge_vertical_tolerance", 30)
+        add_merge_slider("V. Tolerance:", "merge_vertical_tolerance", 4)
         add_merge_slider("H. Tolerance:", "merge_horizontal_tolerance", 50)
         add_merge_slider("Width Ratio:", "merge_width_ratio_threshold", 0.3, is_float=True)
 
@@ -690,8 +690,11 @@ class OCRWindow(QMainWindow):
 
         def listen():
             try:
-                keyboard.add_hotkey("ctrl+shift+alt+z", self.trigger_hotkey)
-                print("[Hotkey] Registered Ctrl+Shift+Alt+Z for screenshot capture")
+                # Z = Capture + Detect + Extract + Copy
+                keyboard.add_hotkey("ctrl+shift+alt+z", lambda: self.trigger_hotkey(mode="extract"))
+                # X = Capture + Detect Only (Preview)
+                keyboard.add_hotkey("ctrl+shift+alt+x", lambda: self.trigger_hotkey(mode="detect"))
+                print("[Hotkey] Registered Ctrl+Shift+Alt+Z (Extract) and Ctrl+Shift+Alt+X (Detect)")
                 keyboard.wait()
             except Exception as e:
                 print(f"[Hotkey] Error: {e}")
@@ -699,13 +702,32 @@ class OCRWindow(QMainWindow):
         t = threading.Thread(target=listen, daemon=True)
         t.start()
 
-    def trigger_hotkey(self):
+    def trigger_hotkey(self, mode="extract"):
         """Called when hotkey is pressed (runs in background thread)"""
         # Use QTimer to safely call GUI method from background thread
-        QTimer.singleShot(0, self.run_capture_and_detect)
+        if mode == "extract":
+            QTimer.singleShot(0, self.run_capture_and_extract)
+        else:
+            QTimer.singleShot(0, self.run_capture_and_detect)
+
+    def run_capture_and_extract(self):
+        """Capture screenshot and run full extraction (Z)"""
+        self.status_label.setText("Capturing screenshot...")
+        self.progress_bar.setValue(5)
+
+        img = capture_screenshot()
+        if img:
+            state.last_image = img
+            state.reset_detections()
+            state.screenshot_version += 1
+            self.display_image(img)
+            self.run_extraction()
+        else:
+            self.status_label.setText("Failed to capture screenshot")
+            self.progress_bar.setValue(0)
 
     def run_capture_and_detect(self):
-        """Capture screenshot and run detection"""
+        """Capture screenshot and run detection preview (X)"""
         self.status_label.setText("Capturing screenshot...")
         self.progress_bar.setValue(5)
 
@@ -840,7 +862,7 @@ class OCRWindow(QMainWindow):
     def draw_tolerance_zones(self, merged_boxes_info: List[dict]):
         """Draw yellow tolerance zones around original boxes"""
         td_config = self.config.get("text_detection", {})
-        v_tol = td_config.get("merge_vertical_tolerance", 30)
+        v_tol = td_config.get("merge_vertical_tolerance", 4)
         h_tol = td_config.get("merge_horizontal_tolerance", 50)
 
         pen = QPen(QColor(255, 255, 0), 1)  # Yellow outline

@@ -128,7 +128,7 @@ class OCRWorker(QThread):
 
             merged_regions, is_merged, original_groups = merge_close_text_boxes(
                 regions,
-                vertical_tolerance=td_config.get("merge_vertical_tolerance", 30),
+                vertical_tolerance=td_config.get("merge_vertical_tolerance", 4),
                 horizontal_tolerance=td_config.get("merge_horizontal_tolerance", 50),
                 width_ratio_threshold=td_config.get("merge_width_ratio_threshold", 0.3)
             )

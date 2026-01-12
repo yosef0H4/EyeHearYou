@@ -71,7 +71,7 @@ The application creates a `config.json` file automatically. You can edit this fi
     "text_detection": {
         "min_width": 30,
         "min_height": 30,
-        "merge_vertical_tolerance": 30,
+        "merge_vertical_tolerance": 4,
         "merge_horizontal_tolerance": 50,
         "merge_width_ratio_threshold": 0.3
     }
