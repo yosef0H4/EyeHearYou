@@ -17,6 +17,7 @@ from .core import (
     capture_screenshot,
     extract_text_from_regions,
 )
+from .core.model_loader import preload_model
 
 
 def process_screenshot():
@@ -61,6 +62,15 @@ def main():
     config = load_config()
     
     print("Model: H2OVL-Mississippi-0.8B (Local)")
+    print("\nPreloading model (this may take a moment on first run)...")
+    
+    # Preload and test the model
+    if not preload_model(test=True):
+        print("\n⚠ Warning: Model preload failed, but continuing anyway.")
+        print("The model will attempt to load on first use.")
+    else:
+        print("\n✓ Model ready!")
+    
     print("\nPress Ctrl+Shift+Alt+Z to capture screenshot and extract text")
     print("Press Ctrl+C to exit")
     print("="*60)

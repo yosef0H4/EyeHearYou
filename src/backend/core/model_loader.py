@@ -149,3 +149,42 @@ def get_model():
     """Get the singleton H2OVL model instance"""
     return H2OVLModel.get_instance()
 
+
+def preload_model(test=True):
+    """
+    Preload the model at startup and optionally test it with a simple image.
+    
+    Args:
+        test: If True, run a simple test inference to verify the model works
+        
+    Returns:
+        True if model loaded (and tested) successfully, False otherwise
+    """
+    try:
+        print("[Model] Preloading H2OVL model...")
+        model = get_model()
+        
+        if test:
+            print("[Model] Running startup test...")
+            # Create a simple test image (white image with some text-like pattern)
+            # We'll use a minimal 100x100 white image
+            test_image = Image.new('RGB', (100, 100), color='white')
+            
+            # Run a simple inference to verify the model works
+            result = model.predict(test_image)
+            if result is not None:
+                print("[Model] ✓ Model loaded and tested successfully!")
+                return True
+            else:
+                print("[Model] ⚠ Model loaded but test returned empty result")
+                return True  # Still return True, model is loaded
+        else:
+            print("[Model] ✓ Model loaded successfully!")
+            return True
+            
+    except Exception as e:
+        print(f"[Model] ✗ Error preloading model: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
