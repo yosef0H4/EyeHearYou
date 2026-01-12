@@ -22,6 +22,29 @@ from src.frontend.constants import KEYBOARD_AVAILABLE, CLIPBOARD_AVAILABLE, keyb
 
 
 class OCRWindow(QMainWindow):
+    # Default values for reset functionality
+    DEFAULT_CONFIG = {
+        "max_image_dimension": 1080,
+        "preprocessing": {
+            "binary_threshold": 0,
+            "invert": False,
+            "dilation": 0,
+            "contrast": 1.0,
+            "brightness": 0
+        },
+        "text_detection": {
+            "min_width": 30,
+            "min_height": 30,
+            "merge_vertical_tolerance": 30,
+            "merge_horizontal_tolerance": 50,
+            "merge_width_ratio_threshold": 0.3
+        },
+        "text_sorting": {
+            "direction": "horizontal_ltr",
+            "group_tolerance": 0.8
+        }
+    }
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Visual Novel OCR - Settings Tuner")
@@ -51,8 +74,8 @@ class OCRWindow(QMainWindow):
         scroll_area.setWidgetResizable(True)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
-        scroll_area.setMinimumWidth(380)
-        scroll_area.setMaximumWidth(480)
+        scroll_area.setMinimumWidth(420)
+        scroll_area.setMaximumWidth(520)
         
         # Create the controls widget
         controls_widget = QWidget()
@@ -134,7 +157,7 @@ class OCRWindow(QMainWindow):
         # Add to splitter
         splitter.addWidget(scroll_area)
         splitter.addWidget(preview_widget)
-        splitter.setSizes([420, 980])
+        splitter.setSizes([460, 940])
 
         # Apply dark theme
         self.apply_dark_theme()
@@ -162,7 +185,11 @@ class OCRWindow(QMainWindow):
         resize_ctrls = QVBoxLayout()
         current_dim = self.config.get("max_image_dimension", 1080)
         
-        lbl_dim = QLabel("Max Dimension:")
+        dim_row = QHBoxLayout()
+        dim_row.setSpacing(8)
+        dim_row.addWidget(QLabel("Max Dimension:"))
+        dim_row.addStretch()
+        
         dim_slider = QSlider(Qt.Orientation.Horizontal)
         dim_slider.setRange(320, 2560)
         dim_slider.setValue(current_dim)
@@ -172,6 +199,16 @@ class OCRWindow(QMainWindow):
         dim_spin.setValue(current_dim)
         dim_spin.setSuffix(" px")
         dim_spin.setMaximumWidth(70)
+
+        # Reset button
+        def reset_dim():
+            default_val = self.DEFAULT_CONFIG["max_image_dimension"]
+            dim_slider.setValue(default_val)
+            dim_spin.setValue(default_val)
+            self.config["max_image_dimension"] = default_val
+            self.resize_viz.update_value(default_val)
+            self.save_config()
+        dim_reset = self.create_reset_button(reset_dim)
 
         # Callbacks
         def update_dim(v):
@@ -185,9 +222,10 @@ class OCRWindow(QMainWindow):
         # Init Viz
         self.resize_viz.update_value(current_dim)
 
-        resize_ctrls.addWidget(lbl_dim)
-        resize_ctrls.addWidget(dim_slider)
-        resize_ctrls.addWidget(dim_spin)
+        dim_row.addWidget(dim_slider)
+        dim_row.addWidget(dim_spin)
+        dim_row.addWidget(dim_reset)
+        resize_ctrls.addLayout(dim_row)
         resize_layout.addLayout(resize_ctrls)
         
         g_layout.addLayout(resize_layout)
@@ -198,6 +236,7 @@ class OCRWindow(QMainWindow):
         # Helper to create slider rows
         def add_slider_row(label, key, min_v, max_v, default, scale=1.0, is_float=False):
             row = QHBoxLayout()
+            row.setSpacing(8)
             row.addWidget(QLabel(label))
             
             slider = QSlider(Qt.Orientation.Horizontal)
@@ -244,8 +283,23 @@ class OCRWindow(QMainWindow):
             spin.valueChanged.connect(on_spin)
             spin.editingFinished.connect(self.save_and_refresh)
             
+            # Reset button
+            def reset_val():
+                default_val = self.DEFAULT_CONFIG["preprocessing"].get(key, default)
+                if is_float:
+                    slider.setValue(int(default_val * scale))
+                    spin.setValue(default_val)
+                else:
+                    slider.setValue(int(default_val))
+                    spin.setValue(int(default_val))
+                if "preprocessing" not in self.config: self.config["preprocessing"] = {}
+                self.config["preprocessing"][key] = default_val
+                self.save_and_refresh()
+            reset_btn = self.create_reset_button(reset_val)
+            
             row.addWidget(slider)
             row.addWidget(spin)
+            row.addWidget(reset_btn)
             g_layout.addLayout(row)
 
         # 1. Invert
@@ -255,8 +309,18 @@ class OCRWindow(QMainWindow):
         chk_invert.setCurrentIndex(1 if pp_config.get("invert", False) else 0)
         chk_invert.currentIndexChanged.connect(lambda: self.update_pp("invert", bool(chk_invert.currentData())))
         inv_layout = QHBoxLayout()
+        inv_layout.setSpacing(8)
         inv_layout.addWidget(QLabel("Colors:"))
         inv_layout.addWidget(chk_invert)
+        
+        # Reset button for Colors
+        def reset_invert():
+            default_val = self.DEFAULT_CONFIG["preprocessing"].get("invert", False)
+            chk_invert.setCurrentIndex(1 if default_val else 0)
+            self.update_pp("invert", default_val)
+        inv_reset = self.create_reset_button(reset_invert)
+        inv_layout.addWidget(inv_reset)
+        
         g_layout.addLayout(inv_layout)
 
         # 2. Threshold
@@ -289,6 +353,30 @@ class OCRWindow(QMainWindow):
         line.setFrameShadow(QFrame.Shadow.Sunken)
         line.setStyleSheet("color: #555;")
         return line
+
+    def create_reset_button(self, callback):
+        """Create a reset button with reload emoji icon"""
+        btn = QPushButton("🔄")
+        btn.setMaximumWidth(30)
+        btn.setMaximumHeight(30)
+        btn.setToolTip("Reset to default")
+        btn.clicked.connect(callback)
+        btn.setStyleSheet("""
+            QPushButton {
+                border: 1px solid #555;
+                border-radius: 4px;
+                background: #2a2a2a;
+                padding: 2px;
+            }
+            QPushButton:hover {
+                background: #3a3a3a;
+                border: 1px solid #666;
+            }
+            QPushButton:pressed {
+                background: #1a1a1a;
+            }
+        """)
+        return btn
 
     def on_order_changed(self, index):
         """Update reading direction config"""
@@ -345,6 +433,7 @@ class OCRWindow(QMainWindow):
 
         # Min Width
         w_row = QHBoxLayout()
+        w_row.setSpacing(8)
         w_row.addWidget(QLabel("Min Width:"))
         w_sl = QSlider(Qt.Orientation.Horizontal)
         w_sl.setRange(5, 300)
@@ -366,11 +455,21 @@ class OCRWindow(QMainWindow):
         w_sl.sliderReleased.connect(self.save_and_refresh)
         w_sp.valueChanged.connect(on_w_change)
         w_sp.editingFinished.connect(self.save_and_refresh)
-        w_row.addWidget(w_sl); w_row.addWidget(w_sp)
+        
+        # Reset button
+        def reset_w():
+            default_val = self.DEFAULT_CONFIG["text_detection"].get("min_width", 30)
+            w_sl.setValue(default_val)
+            w_sp.setValue(default_val)
+            on_w_change(default_val)
+        w_reset = self.create_reset_button(reset_w)
+        
+        w_row.addWidget(w_sl); w_row.addWidget(w_sp); w_row.addWidget(w_reset)
         g_layout.addLayout(w_row)
 
         # Min Height
         h_row = QHBoxLayout()
+        h_row.setSpacing(8)
         h_row.addWidget(QLabel("Min Height:"))
         h_sl = QSlider(Qt.Orientation.Horizontal)
         h_sl.setRange(5, 300)
@@ -392,7 +491,16 @@ class OCRWindow(QMainWindow):
         h_sl.sliderReleased.connect(self.save_and_refresh)
         h_sp.valueChanged.connect(on_h_change)
         h_sp.editingFinished.connect(self.save_and_refresh)
-        h_row.addWidget(h_sl); h_row.addWidget(h_sp)
+        
+        # Reset button
+        def reset_h():
+            default_val = self.DEFAULT_CONFIG["text_detection"].get("min_height", 30)
+            h_sl.setValue(default_val)
+            h_sp.setValue(default_val)
+            on_h_change(default_val)
+        h_reset = self.create_reset_button(reset_h)
+        
+        h_row.addWidget(h_sl); h_row.addWidget(h_sp); h_row.addWidget(h_reset)
         g_layout.addLayout(h_row)
 
         g_layout.addWidget(self.create_separator())
@@ -412,6 +520,7 @@ class OCRWindow(QMainWindow):
             self.config["text_sorting"]["group_tolerance"] = 0.8
             sort_config = self.config["text_sorting"]
         dir_row = QHBoxLayout()
+        dir_row.setSpacing(8)
         dir_row.addWidget(QLabel("Order:"))
         self.order_combo = QComboBox()
         self.order_combo.addItem("Left to Right (Standard)", "horizontal_ltr")
@@ -423,7 +532,18 @@ class OCRWindow(QMainWindow):
         idx = self.order_combo.findData(cur_dir)
         if idx >= 0: self.order_combo.setCurrentIndex(idx)
         self.order_combo.currentIndexChanged.connect(self.on_order_changed)
+        
+        # Reset button
+        def reset_order():
+            default_val = self.DEFAULT_CONFIG["text_sorting"].get("direction", "horizontal_ltr")
+            idx = self.order_combo.findData(default_val)
+            if idx >= 0:
+                self.order_combo.setCurrentIndex(idx)
+                self.on_order_changed(idx)
+        dir_reset = self.create_reset_button(reset_order)
+        
         dir_row.addWidget(self.order_combo, 1)
+        dir_row.addWidget(dir_reset)
         g_layout.addLayout(dir_row)
 
         # Viz Update Logic for Merge
@@ -436,6 +556,7 @@ class OCRWindow(QMainWindow):
         # Helper for merge sliders
         def add_merge_slider(label, key, default, max_val=300, is_float=False):
             row = QHBoxLayout()
+            row.setSpacing(8)
             row.addWidget(QLabel(label))
             
             sl = QSlider(Qt.Orientation.Horizontal)
@@ -482,8 +603,21 @@ class OCRWindow(QMainWindow):
             sl.sliderReleased.connect(self.save_and_refresh)
             sp.editingFinished.connect(self.save_and_refresh)
             
+            # Reset button
+            def reset_val():
+                default_val = self.DEFAULT_CONFIG["text_detection"].get(key, default)
+                if is_float:
+                    sl.setValue(int(default_val * 100))
+                    sp.setValue(default_val)
+                else:
+                    sl.setValue(int(default_val))
+                    sp.setValue(int(default_val))
+                on_change(default_val if not is_float else int(default_val * 100))
+            reset_btn = self.create_reset_button(reset_val)
+            
             row.addWidget(sl)
             row.addWidget(sp)
+            row.addWidget(reset_btn)
             g_layout.addLayout(row)
 
         add_merge_slider("V. Tolerance:", "merge_vertical_tolerance", 30)
@@ -492,6 +626,7 @@ class OCRWindow(QMainWindow):
 
         # Line Grouping (Sorting)
         grp_row = QHBoxLayout()
+        grp_row.setSpacing(8)
         grp_row.addWidget(QLabel("Line Grouping:"))
         g_sl = QSlider(Qt.Orientation.Horizontal)
         g_sl.setRange(1, 20)
@@ -517,8 +652,17 @@ class OCRWindow(QMainWindow):
         g_sp.valueChanged.connect(on_grp_change)
         g_sp.editingFinished.connect(self.save_and_refresh)
         
+        # Reset button
+        def reset_grp():
+            default_val = self.DEFAULT_CONFIG["text_sorting"].get("group_tolerance", 0.8)
+            g_sl.setValue(int(default_val * 10))
+            g_sp.setValue(default_val)
+            on_grp_change(default_val)
+        grp_reset = self.create_reset_button(reset_grp)
+        
         grp_row.addWidget(g_sl)
         grp_row.addWidget(g_sp)
+        grp_row.addWidget(grp_reset)
         g_layout.addLayout(grp_row)
 
         # Initial Viz Update

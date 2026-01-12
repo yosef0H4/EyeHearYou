@@ -89,6 +89,38 @@ class H2OVLModel:
             traceback.print_exc()
             raise e
 
+    def test_text_only(self, prompt: str = "Hello") -> str:
+        """Test the model with a simple text-only prompt (no image)
+        
+        Args:
+            prompt: Text prompt to test with
+            
+        Returns:
+            Model response string
+        """
+        if self._model is None:
+            self._load_model()
+        
+        generation_config = dict(max_new_tokens=128, do_sample=False)
+        
+        try:
+            with torch.autocast(device_type=self._device, dtype=torch.bfloat16):
+                # Pass None for image_files to do text-only inference
+                response, _ = self._model.chat(
+                    self._tokenizer,
+                    None,  # No image
+                    prompt,
+                    generation_config,
+                    history=None,
+                    return_history=True
+                )
+            return response
+        except Exception as e:
+            print(f"[Model] Text-only test error: {e}")
+            import traceback
+            traceback.print_exc()
+            return ""
+    
     def predict(self, image: Image.Image) -> str:
         """Run inference on a single image
         
@@ -152,10 +184,10 @@ def get_model():
 
 def preload_model(test=True):
     """
-    Preload the model at startup and optionally test it with a simple image.
+    Preload the model at startup and optionally test it with a simple text prompt.
     
     Args:
-        test: If True, run a simple test inference to verify the model works
+        test: If True, run a simple text-only test inference to verify the model works
         
     Returns:
         True if model loaded (and tested) successfully, False otherwise
@@ -166,13 +198,9 @@ def preload_model(test=True):
         
         if test:
             print("[Model] Running startup test...")
-            # Create a simple test image (white image with some text-like pattern)
-            # We'll use a minimal 100x100 white image
-            test_image = Image.new('RGB', (100, 100), color='white')
-            
-            # Run a simple inference to verify the model works
-            result = model.predict(test_image)
-            if result is not None:
+            # Run a simple text-only inference to verify the model works
+            result = model.test_text_only("Hello")
+            if result is not None and len(result.strip()) > 0:
                 print("[Model] ✓ Model loaded and tested successfully!")
                 return True
             else:
