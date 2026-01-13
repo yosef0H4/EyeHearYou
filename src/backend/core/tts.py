@@ -9,6 +9,7 @@ if os.getenv("TORCHVISION_PATCH", "0") == "1":
 
 import threading
 import queue
+import re
 import sounddevice as sd
 import numpy as np
 import torch
@@ -330,6 +331,45 @@ def preload_tts(test=True):
         print("[TTS] ✓ TTS pipeline loaded successfully!")
         return True
 
+def normalize_text_for_tts(text: str) -> str:
+    """
+    Normalize text before sending to TTS:
+    - Convert to lowercase
+    - Keep only alphanumeric characters and basic punctuation
+    - Remove odd symbols
+    
+    Args:
+        text: Raw text to normalize
+    
+    Returns:
+        Normalized text suitable for TTS
+    """
+    if not text:
+        return ""
+    
+    # Convert to lowercase
+    text = text.lower()
+    
+    # Define allowed characters: letters, numbers, spaces, and basic punctuation
+    # Basic punctuation: period, comma, question mark, exclamation, apostrophe, hyphen, 
+    # parentheses, brackets, colon, semicolon
+    allowed_chars = set(
+        'abcdefghijklmnopqrstuvwxyz'
+        '0123456789'
+        ' .,?!\'-()[]:;'
+    )
+    
+    # Filter to keep only allowed characters
+    normalized = ''.join(c if c in allowed_chars else ' ' for c in text)
+    
+    # Clean up multiple spaces
+    normalized = re.sub(r'\s+', ' ', normalized)
+    
+    # Strip leading/trailing whitespace
+    normalized = normalized.strip()
+    
+    return normalized
+
 def speak_text(text: str, clear_queue: bool = False):
     """
     Queue text to be spoken.
@@ -338,6 +378,12 @@ def speak_text(text: str, clear_queue: bool = False):
         text: The text to speak
         clear_queue: If True, stops current audio and clears pending messages (good for fresh captures)
     """
+    if not text or not text.strip():
+        return
+
+    # Normalize text before TTS
+    text = normalize_text_for_tts(text)
+    
     if not text or not text.strip():
         return
 

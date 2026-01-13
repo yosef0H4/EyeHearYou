@@ -482,6 +482,10 @@ class OCRWindow(QMainWindow):
         
         # Refresh UI to reflect new config
         self.refresh_ui_from_config()
+        
+        # Re-trigger detection if image is loaded and RapidOCR is enabled
+        if state.last_image and state.use_rapidocr:
+            self.run_detection_preview()
 
     def duplicate_profile(self):
         """Duplicate the current profile with a new name"""
