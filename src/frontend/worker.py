@@ -359,6 +359,8 @@ class OCRWorker(QThread):
                     speak_text(clean_text, clear_queue=False)
 
             final_text = "\n".join(extracted_texts) if extracted_texts else "No text extracted."
+            # Store extracted text in state for Play button
+            state.last_extracted_text = final_text if final_text != "No text extracted." else ""
             self.progress_signal.emit("Finalizing...", 100)
             # We don't trigger speak_text(final_text) here because we already streamed it!
             self.finished_signal.emit(all_boxes, regions, merged_boxes_info, final_text)

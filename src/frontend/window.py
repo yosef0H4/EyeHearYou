@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QTimer, QRect, QEvent, QPointF, QRectF
 from PyQt6.QtGui import QPixmap, QImage, QPen, QColor, QBrush, QPainter, QFont, QPainterPath
 
-from src.backend.core.config import load_config, CONFIG_FILE
+from src.backend.core.config import load_config, CONFIG_FILE, load_profiles, save_profiles
 from src.backend.core.capture import capture_screenshot
 from src.backend.state import state
 from src.backend.core.filtering import (
@@ -67,6 +67,9 @@ class OCRWindow(QMainWindow):
         self.pixmap_item = None  # Store reference to pixmap item
         self.manual_box_items = []  # Keep track of visual items for manual boxes
         
+        # Widget references for profile refresh - will be populated during UI creation
+        self._config_widgets = {}  # Maps config paths to widget tuples (slider, spinbox, etc.)
+        
         # Load manual boxes from config (ensure they persist)
         if "manual_boxes" in self.config:
             # Convert lists (from JSON) back to tuples
@@ -116,6 +119,15 @@ class OCRWindow(QMainWindow):
         model_info.setStyleSheet("font-weight: bold; color: #4CAF50; padding: 5px;")
         controls_layout.addWidget(model_info)
 
+        # Profile Management Group
+        self.create_profile_group(controls_layout)
+
+        # Locked Notice (Hidden by default)
+        self.lock_notice = QLabel("⚠️ Default profile is locked. Duplicate to edit.")
+        self.lock_notice.setStyleSheet("color: #ffb74d; font-weight: bold; padding: 5px; background: #332b00; border-radius: 4px;")
+        self.lock_notice.setVisible(False)
+        controls_layout.addWidget(self.lock_notice)
+
         # NEW: Selection Tools Group
         self.create_selection_group(controls_layout)
 
@@ -127,6 +139,9 @@ class OCRWindow(QMainWindow):
 
         # 4. TTS Group
         self.create_tts_group(controls_layout)
+
+        # Update profile buttons/locks after all groups are created
+        self.update_profile_buttons()
 
         # Buttons
         btn_layout = QVBoxLayout()
@@ -197,9 +212,221 @@ class OCRWindow(QMainWindow):
         self.apply_dark_theme()
 
 
+    def create_profile_group(self, layout):
+        """Create Configuration Profile Management Group"""
+        self.profile_group = QGroupBox("Configuration Profile")
+        p_layout = QVBoxLayout()
+        
+        # Profile selector row
+        selector_row = QHBoxLayout()
+        self.profile_combo = QComboBox()
+        self.profile_combo.currentTextChanged.connect(self.on_profile_changed)
+        selector_row.addWidget(self.profile_combo, 1)
+
+        # Action buttons
+        self.btn_new_profile = QPushButton("📋")
+        self.btn_new_profile.setToolTip("Duplicate current profile")
+        self.btn_new_profile.setFixedWidth(35)
+        self.btn_new_profile.clicked.connect(self.duplicate_profile)
+        
+        self.btn_rename_profile = QPushButton("✏️")
+        self.btn_rename_profile.setToolTip("Rename current profile")
+        self.btn_rename_profile.setFixedWidth(35)
+        self.btn_rename_profile.clicked.connect(self.rename_profile)
+
+        self.btn_delete_profile = QPushButton("🗑️")
+        self.btn_delete_profile.setToolTip("Delete current profile")
+        self.btn_delete_profile.setFixedWidth(35)
+        self.btn_delete_profile.clicked.connect(self.delete_profile)
+        
+        selector_row.addWidget(self.btn_new_profile)
+        selector_row.addWidget(self.btn_rename_profile)
+        selector_row.addWidget(self.btn_delete_profile)
+        p_layout.addLayout(selector_row)
+        
+        self.profile_group.setLayout(p_layout)
+        layout.addWidget(self.profile_group)
+        
+        # Initialize profile list after buttons are created
+        self.refresh_profile_list()
+
+    def refresh_profile_list(self):
+        """Refresh the profile combo box with current profiles"""
+        self.profile_combo.blockSignals(True)
+        self.profile_combo.clear()
+        data = load_profiles()
+        # Always add Default first
+        self.profile_combo.addItem("Default")
+        # Add user profiles in sorted order
+        for name in sorted(data["profiles"].keys()):
+            self.profile_combo.addItem(name)
+        
+        # Set active profile
+        active_name = data.get("active", "Default")
+        idx = self.profile_combo.findText(active_name)
+        self.profile_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        self.update_profile_buttons()
+        self.profile_combo.blockSignals(False)
+
+    def update_profile_buttons(self):
+        """Update button states and lock UI based on current profile"""
+        is_default = self.profile_combo.currentText() == "Default"
+        self.btn_delete_profile.setEnabled(not is_default)
+        self.btn_rename_profile.setEnabled(not is_default)
+        
+        # Show/Hide lock notice
+        if hasattr(self, 'lock_notice'):
+            self.lock_notice.setVisible(is_default)
+        
+        # Lock/Unlock all setting groups
+        groups = [
+            getattr(self, 'selection_group', None),
+            getattr(self, 'image_settings_group', None),
+            getattr(self, 'text_processing_group', None),
+            getattr(self, 'tts_group', None)
+        ]
+        
+        for group in groups:
+            if group:
+                group.setEnabled(not is_default)
+
+    def on_profile_changed(self, name):
+        """Handle profile selection change"""
+        if not name:
+            return
+        
+        data = load_profiles()
+        data["active"] = name
+        save_profiles(data)
+        
+        # Reload config for new profile
+        self.config = load_config()
+        
+        # Update button states
+        self.update_profile_buttons()
+        
+        # Refresh UI to reflect new config
+        self.refresh_ui_from_config()
+
+    def duplicate_profile(self):
+        """Duplicate the current profile with a new name"""
+        from PyQt6.QtWidgets import QInputDialog, QMessageBox
+        
+        current_name = self.profile_combo.currentText()
+        name, ok = QInputDialog.getText(
+            self, 
+            "Duplicate Profile", 
+            f"Enter name for new profile (duplicated from '{current_name}'):",
+            text=f"{current_name} Copy"
+        )
+        
+        if not ok or not name.strip():
+            return
+        
+        name = name.strip()
+        
+        # Validate name
+        if name == "Default":
+            QMessageBox.warning(self, "Invalid Name", "Cannot use 'Default' as a profile name.")
+            return
+        
+        data = load_profiles()
+        if name in data["profiles"]:
+            reply = QMessageBox.question(
+                self,
+                "Profile Exists",
+                f"Profile '{name}' already exists. Overwrite?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                return
+        
+        # Duplicate current config
+        data["profiles"][name] = self.config.copy()
+        data["active"] = name
+        save_profiles(data)
+        
+        # Refresh UI
+        self.refresh_profile_list()
+        self.status_label.setText(f"Profile '{name}' created.")
+
+    def rename_profile(self):
+        """Rename the current profile"""
+        from PyQt6.QtWidgets import QInputDialog, QMessageBox
+        
+        current_name = self.profile_combo.currentText()
+        if current_name == "Default":
+            QMessageBox.information(self, "Cannot Rename", "The 'Default' profile cannot be renamed.")
+            return
+        
+        name, ok = QInputDialog.getText(
+            self,
+            "Rename Profile",
+            f"Enter new name for '{current_name}':",
+            text=current_name
+        )
+        
+        if not ok or not name.strip():
+            return
+        
+        name = name.strip()
+        
+        # Validate name
+        if name == "Default":
+            QMessageBox.warning(self, "Invalid Name", "Cannot use 'Default' as a profile name.")
+            return
+        
+        data = load_profiles()
+        if name in data["profiles"]:
+            QMessageBox.warning(self, "Name Exists", f"Profile '{name}' already exists.")
+            return
+        
+        # Rename profile
+        data["profiles"][name] = data["profiles"].pop(current_name)
+        if data["active"] == current_name:
+            data["active"] = name
+        save_profiles(data)
+        
+        # Refresh UI
+        self.refresh_profile_list()
+        self.status_label.setText(f"Profile renamed to '{name}'.")
+
+    def delete_profile(self):
+        """Delete the current profile"""
+        from PyQt6.QtWidgets import QMessageBox
+        
+        current_name = self.profile_combo.currentText()
+        if current_name == "Default":
+            QMessageBox.information(self, "Cannot Delete", "The 'Default' profile cannot be deleted.")
+            return
+        
+        reply = QMessageBox.question(
+            self,
+            "Delete Profile",
+            f"Are you sure you want to delete profile '{current_name}'?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+        
+        data = load_profiles()
+        if current_name in data["profiles"]:
+            del data["profiles"][current_name]
+            # If deleting active profile, switch to Default
+            if data["active"] == current_name:
+                data["active"] = "Default"
+            save_profiles(data)
+        
+        # Refresh UI and reload Default config
+        self.refresh_profile_list()
+        self.on_profile_changed("Default")
+        self.status_label.setText(f"Profile '{current_name}' deleted. Switched to Default.")
+
+
     def create_selection_group(self, layout):
         """Create Selection Tools Group"""
-        group = QGroupBox("Selection Tools")
+        self.selection_group = QGroupBox("Selection Tools")
         g_layout = QVBoxLayout()
         
         # 1. RapidOCR Toggle
@@ -260,8 +487,8 @@ class OCRWindow(QMainWindow):
         actions_layout.addWidget(btn_clear_manual)
         g_layout.addLayout(actions_layout)
         
-        group.setLayout(g_layout)
-        layout.addWidget(group)
+        self.selection_group.setLayout(g_layout)
+        layout.addWidget(self.selection_group)
 
     def on_rapid_toggled(self, checked):
         state.use_rapidocr = checked
@@ -337,7 +564,7 @@ class OCRWindow(QMainWindow):
 
     def create_image_settings_group(self, layout):
         """Combined Image Settings (Size + Preprocessing)"""
-        group = QGroupBox("Image Adjustments")
+        self.image_settings_group = QGroupBox("Image Adjustments")
         g_layout = QVBoxLayout()
         pp_config = self.config.get("preprocessing", {})
 
@@ -370,6 +597,9 @@ class OCRWindow(QMainWindow):
         dim_spin.setValue(current_dim)
         dim_spin.setSuffix(" px")
         dim_spin.setMaximumWidth(70)
+        
+        # Store references for profile refresh
+        self._config_widgets["max_image_dimension"] = (dim_slider, dim_spin, None)  # (slider, spinbox, combo)
 
         # Reset button
         def reset_dim():
@@ -424,6 +654,9 @@ class OCRWindow(QMainWindow):
                 spin.setRange(min_v, max_v)
                 spin.setValue(cur_val)
             spin.setMaximumWidth(70)
+            
+            # Store references for profile refresh
+            self._config_widgets[f"preprocessing.{key}"] = (slider, spin, None)
 
             # Sync logic
             def on_slider(v):
@@ -473,6 +706,9 @@ class OCRWindow(QMainWindow):
         chk_invert.addItem("Invert Colors", True)
         chk_invert.setCurrentIndex(1 if pp_config.get("invert", False) else 0)
         chk_invert.currentIndexChanged.connect(lambda: self.update_pp("invert", bool(chk_invert.currentData())))
+        
+        # Store reference for profile refresh
+        self._config_widgets["preprocessing.invert"] = (None, None, chk_invert)
         inv_layout = QHBoxLayout()
         inv_layout.setSpacing(8)
         inv_layout.addWidget(QLabel("Colors:"))
@@ -500,8 +736,8 @@ class OCRWindow(QMainWindow):
         # 5. Dilation
         add_slider_row("Thicken Text:", "dilation", 0, 5, 0)
 
-        group.setLayout(g_layout)
-        layout.addWidget(group)
+        self.image_settings_group.setLayout(g_layout)
+        layout.addWidget(self.image_settings_group)
 
     def update_pp(self, key, value):
         """Update preprocessing config"""
@@ -561,7 +797,7 @@ class OCRWindow(QMainWindow):
 
     def create_text_processing_group(self, layout):
         """Combined Detection and Merging Settings"""
-        group = QGroupBox("Text Detection & Merging")
+        self.text_processing_group = QGroupBox("Text Detection & Merging")
         g_layout = QVBoxLayout()
         td_config = self.config.get("text_detection", {})
         
@@ -621,6 +857,9 @@ class OCRWindow(QMainWindow):
         h_ratio_sp.setValue(h_ratio_val)
         h_ratio_sp.setSuffix(" %")
         h_ratio_sp.setMaximumWidth(70)
+        
+        # Store references for profile refresh
+        self._config_widgets["text_detection.min_height_ratio"] = (h_ratio_sl, h_ratio_sp, None)
 
         def on_h_ratio_change(v):
             real_val = v / 1000.0 if isinstance(v, int) else v
@@ -661,6 +900,9 @@ class OCRWindow(QMainWindow):
         median_sp.setSingleStep(0.05)
         median_sp.setValue(median_val)
         median_sp.setMaximumWidth(70)
+        
+        # Store references for profile refresh
+        self._config_widgets["text_detection.median_height_fraction"] = (median_sl, median_sp, None)
 
         def on_median_change(v):
             real_val = v / 100.0 if isinstance(v, int) else v
@@ -762,6 +1004,9 @@ class OCRWindow(QMainWindow):
             sp.setSuffix("x")
             sp.setMaximumWidth(70)
             
+            # Store references for profile refresh
+            self._config_widgets[f"text_detection.{key}"] = (sl, sp, None)
+            
             def on_change(v):
                 real_val = v / 100.0 if isinstance(v, int) else v
                 if "text_detection" not in self.config: self.config["text_detection"] = {}
@@ -813,6 +1058,9 @@ class OCRWindow(QMainWindow):
         g_sp.setValue(grp_val)
         g_sp.setMaximumWidth(70)
         
+        # Store references for profile refresh
+        self._config_widgets["text_sorting.group_tolerance"] = (g_sl, g_sp, None)
+        
         def on_grp_change(v):
             # v can be int (slider) or float (spinbox)
             real_val = v / 10.0 if isinstance(v, int) else v
@@ -847,12 +1095,12 @@ class OCRWindow(QMainWindow):
         update_viz_detection()
         update_viz_merge()
 
-        group.setLayout(g_layout)
-        layout.addWidget(group)
+        self.text_processing_group.setLayout(g_layout)
+        layout.addWidget(self.text_processing_group)
 
     def create_tts_group(self, layout):
-        """Text-to-Speech Settings"""
-        group = QGroupBox("🔊 Text-to-Speech (Kokoro)")
+        """Text-to-Speech Settings with Voice Selection and Media Player"""
+        self.tts_group = QGroupBox("🔊 Text-to-Speech (Kokoro)")
         g_layout = QVBoxLayout()
         tts_config = self.config.get("tts", {})
 
@@ -861,39 +1109,251 @@ class OCRWindow(QMainWindow):
         info_label.setStyleSheet("color: #4CAF50; font-style: italic; padding: 5px;")
         g_layout.addWidget(info_label)
 
-        # Speed Slider
-        row2 = QHBoxLayout()
-        row2.addWidget(QLabel("Speed:"))
+        # Store full voice list for filtering (dynamically fetched from HuggingFace)
+        from src.backend.core.tts import get_available_voices
+        self.all_voices = get_available_voices()  # Dynamically fetch available voices
+
+        # 0. Voice Filters Row
+        filter_row = QHBoxLayout()
+        filter_row.addWidget(QLabel("Language:"))
+        self.lang_filter = QComboBox()
+        self.lang_filter.addItems(["All", "🇺🇸 American", "🇬🇧 British"])
+        self.lang_filter.currentIndexChanged.connect(self.filter_voices)
+        filter_row.addWidget(self.lang_filter)
         
-        sl_speed = QSlider(Qt.Orientation.Horizontal)
-        sl_speed.setRange(5, 20)  # 0.5x to 2.0x
+        filter_row.addWidget(QLabel("Gender:"))
+        self.gender_filter = QComboBox()
+        self.gender_filter.addItems(["All", "Male", "Female"])
+        self.gender_filter.currentIndexChanged.connect(self.filter_voices)
+        filter_row.addWidget(self.gender_filter)
+        g_layout.addLayout(filter_row)
+
+        # 1. Voice Selection Row
+        voice_row = QHBoxLayout()
+        voice_row.addWidget(QLabel("Voice:"))
+        self.voice_combo = QComboBox()
+        # Initialize voice combo with all voices first
+        for name, code in self.all_voices.items():
+            self.voice_combo.addItem(name, code)
+        
+        # Set current voice from config
+        current_voice_code = tts_config.get("voice", "af_heart")
+        index = self.voice_combo.findData(current_voice_code)
+        if index >= 0:
+            self.voice_combo.setCurrentIndex(index)
+        else:
+            # Fallback: set to first item if voice not found
+            self.voice_combo.setCurrentIndex(0)
+        
+        self.voice_combo.currentIndexChanged.connect(self.save_tts_settings)
+        voice_row.addWidget(self.voice_combo, 1)
+        g_layout.addLayout(voice_row)
+
+        # 2. Speed Slider
+        speed_row = QHBoxLayout()
+        speed_row.addWidget(QLabel("Speed:"))
+        
+        self.sl_speed = QSlider(Qt.Orientation.Horizontal)
+        self.sl_speed.setRange(5, 20)  # 0.5x to 2.0x
         current_speed = tts_config.get("speed", 1.0)
-        sl_speed.setValue(int(current_speed * 10))
+        self.sl_speed.setValue(int(current_speed * 10))
         
-        sp_speed = QDoubleSpinBox()
-        sp_speed.setRange(0.5, 2.0)
-        sp_speed.setSingleStep(0.1)
-        sp_speed.setValue(current_speed)
-        sp_speed.setMaximumWidth(60)
+        self.sp_speed = QDoubleSpinBox()
+        self.sp_speed.setRange(0.5, 2.0)
+        self.sp_speed.setSingleStep(0.1)
+        self.sp_speed.setValue(current_speed)
+        self.sp_speed.setMaximumWidth(60)
 
         def on_speed(v):
             real_val = v / 10.0 if isinstance(v, int) else v
             if "tts" not in self.config: self.config["tts"] = {}
             self.config["tts"]["speed"] = real_val
             
-            sl_speed.blockSignals(True); sl_speed.setValue(int(real_val*10)); sl_speed.blockSignals(False)
-            sp_speed.blockSignals(True); sp_speed.setValue(real_val); sp_speed.blockSignals(False)
+            self.sl_speed.blockSignals(True); self.sl_speed.setValue(int(real_val*10)); self.sl_speed.blockSignals(False)
+            self.sp_speed.blockSignals(True); self.sp_speed.setValue(real_val); self.sp_speed.blockSignals(False)
             self.save_config()
 
-        sl_speed.valueChanged.connect(on_speed)
-        sp_speed.valueChanged.connect(on_speed)
+        self.sl_speed.valueChanged.connect(on_speed)
+        self.sp_speed.valueChanged.connect(on_speed)
 
-        row2.addWidget(sl_speed)
-        row2.addWidget(sp_speed)
-        g_layout.addLayout(row2)
+        speed_row.addWidget(self.sl_speed)
+        speed_row.addWidget(self.sp_speed)
+        g_layout.addLayout(speed_row)
 
-        group.setLayout(g_layout)
-        layout.addWidget(group)
+        # 2b. Volume Slider
+        volume_row = QHBoxLayout()
+        volume_row.addWidget(QLabel("Volume:"))
+        
+        self.sl_volume = QSlider(Qt.Orientation.Horizontal)
+        self.sl_volume.setRange(0, 200)  # 0% to 200%
+        current_volume = tts_config.get("volume", 1.0) * 100  # Convert 0.0-2.0 to 0-200
+        self.sl_volume.setValue(int(current_volume))
+        
+        self.sp_volume = QSpinBox()
+        self.sp_volume.setRange(0, 200)
+        self.sp_volume.setSuffix("%")
+        self.sp_volume.setValue(int(current_volume))
+        self.sp_volume.setMaximumWidth(70)
+
+        def on_volume(v):
+            real_val = v / 100.0 if isinstance(v, int) else v  # Convert to 0.0-2.0
+            if "tts" not in self.config: self.config["tts"] = {}
+            self.config["tts"]["volume"] = real_val
+            
+            self.sl_volume.blockSignals(True); self.sl_volume.setValue(int(real_val*100)); self.sl_volume.blockSignals(False)
+            self.sp_volume.blockSignals(True); self.sp_volume.setValue(int(real_val*100)); self.sp_volume.blockSignals(False)
+            self.save_config()
+
+        self.sl_volume.valueChanged.connect(on_volume)
+        self.sp_volume.valueChanged.connect(on_volume)
+
+        volume_row.addWidget(self.sl_volume)
+        volume_row.addWidget(self.sp_volume)
+        g_layout.addLayout(volume_row)
+
+        # 3. Media Player Controls
+        player_layout = QHBoxLayout()
+        self.btn_play_new = QPushButton("▶ Play")
+        self.btn_play_new.clicked.connect(self.play_tts_with_settings)
+        self.btn_play_new.setToolTip("Re-generate and play TTS with current voice/speed settings")
+        
+        self.btn_replay = QPushButton("🔁 Replay")
+        self.btn_replay.clicked.connect(self.replay_audio)
+        self.btn_replay.setToolTip("Replay the last generated audio (same voice/speed)")
+        
+        self.btn_stop_audio = QPushButton("⏹ Stop")
+        self.btn_stop_audio.clicked.connect(self.stop_audio)
+        self.btn_stop_audio.setToolTip("Stop current audio playback")
+        
+        player_layout.addWidget(self.btn_play_new)
+        player_layout.addWidget(self.btn_replay)
+        player_layout.addWidget(self.btn_stop_audio)
+        g_layout.addLayout(player_layout)
+
+        # 4. Phoneme Display (IPA tokens)
+        phoneme_label = QLabel("Phonemes (IPA):")
+        phoneme_label.setStyleSheet("color: #aaa; font-size: 11px;")
+        g_layout.addWidget(phoneme_label)
+        
+        self.phoneme_output = QLineEdit()
+        self.phoneme_output.setReadOnly(True)
+        self.phoneme_output.setPlaceholderText("Phonemes will appear here after text is read...")
+        self.phoneme_output.setStyleSheet("background: #111; color: #888; font-family: monospace; font-size: 10px; padding: 4px;")
+        g_layout.addWidget(self.phoneme_output)
+
+        self.tts_group.setLayout(g_layout)
+        layout.addWidget(self.tts_group)
+
+    def populate_voice_combo(self):
+        """Populate voice combo box based on current filters"""
+        # Get current selection to preserve it if possible
+        current_voice_code = None
+        if hasattr(self, 'voice_combo') and self.voice_combo.count() > 0:
+            current_voice_code = self.voice_combo.currentData()
+        
+        # Clear and repopulate
+        self.voice_combo.clear()
+        
+        # Get filter values
+        lang_filter = self.lang_filter.currentText()
+        gender_filter = self.gender_filter.currentText()
+        
+        # Filter voices
+        filtered_voices = {}
+        for name, code in self.all_voices.items():
+            # Language filter
+            if lang_filter == "🇺🇸 American" and not code.startswith(('af_', 'am_')):
+                continue
+            if lang_filter == "🇬🇧 British" and not code.startswith(('bf_', 'bm_')):
+                continue
+            
+            # Gender filter
+            if gender_filter == "Male" and not code.startswith(('am_', 'bm_')):
+                continue
+            if gender_filter == "Female" and not code.startswith(('af_', 'bf_')):
+                continue
+            
+            filtered_voices[name] = code
+        
+        # Add filtered voices to combo
+        for name, code in filtered_voices.items():
+            self.voice_combo.addItem(name, code)
+        
+        # Restore previous selection if it's still available
+        if current_voice_code:
+            index = self.voice_combo.findData(current_voice_code)
+            if index >= 0:
+                self.voice_combo.setCurrentIndex(index)
+            elif self.voice_combo.count() > 0:
+                # If previous selection not available, select first item
+                self.voice_combo.setCurrentIndex(0)
+                # Only save if we're not in the middle of initialization
+                if hasattr(self, 'config'):
+                    self.save_tts_settings()  # Save new selection
+        elif self.voice_combo.count() > 0:
+            # If no previous selection, select first item
+            self.voice_combo.setCurrentIndex(0)
+
+    def filter_voices(self):
+        """Filter voice list based on language and gender filters"""
+        self.populate_voice_combo()
+
+    def save_tts_settings(self):
+        """Save current GUI TTS settings to config"""
+        if "tts" not in self.config:
+            self.config["tts"] = {}
+        self.config["tts"]["voice"] = self.voice_combo.currentData()
+        self.config["tts"]["speed"] = self.sp_speed.value()
+        self.config["tts"]["volume"] = self.sp_volume.value() / 100.0  # Convert % to 0.0-2.0
+        self.save_config()
+
+    def play_tts_with_settings(self):
+        """Re-generate TTS with current voice/speed settings"""
+        from src.backend.core.tts import speak_text, stop_tts_engine
+        
+        # Get text from text output
+        text = self.text_output.toPlainText().strip()
+        if not text:
+            # Fallback to state
+            text = state.last_extracted_text if hasattr(state, 'last_extracted_text') else ""
+        
+        if not text:
+            self.status_label.setText("No text to read - capture and extract text first")
+            return
+        
+        # Stop any current playback
+        stop_tts_engine()
+        
+        # Queue new TTS with current settings
+        speak_text(text, clear_queue=True)
+        self.status_label.setText(f"Generating TTS with {self.voice_combo.currentText()}...")
+
+    def replay_audio(self):
+        """Replay the last generated audio from state (with current volume)"""
+        import sounddevice as sd
+        import numpy as np
+        if hasattr(state, 'last_audio_data') and state.last_audio_data is not None:
+            try:
+                # Get current volume setting
+                volume = self.config.get("tts", {}).get("volume", 1.0)
+                # Apply volume to stored audio
+                audio_with_volume = state.last_audio_data * volume
+                sd.play(audio_with_volume, 24000)
+                self.status_label.setText("Replaying audio...")
+            except Exception as e:
+                print(f"[TTS] Replay error: {e}")
+                self.status_label.setText("Replay failed - no audio data")
+        else:
+            self.status_label.setText("No audio to replay")
+
+    def stop_audio(self):
+        """Stop current audio playback"""
+        import sounddevice as sd
+        try:
+            sd.stop()
+            self.status_label.setText("Audio stopped")
+        except Exception as e:
+            print(f"[TTS] Stop error: {e}")
 
     def save_and_refresh(self):
         """Save config and refresh detection if image exists"""
@@ -913,13 +1373,179 @@ class OCRWindow(QMainWindow):
         else:
             self.run_detection_preview()
 
+    def refresh_ui_from_config(self):
+        """Refresh all UI elements to reflect current config values"""
+        # Update resize visualizer
+        if hasattr(self, 'resize_viz'):
+            max_dim = self.config.get("max_image_dimension", 1080)
+            self.resize_viz.update_value(max_dim)
+        
+        # Update max_image_dimension
+        if "max_image_dimension" in self._config_widgets:
+            slider, spinbox, _ = self._config_widgets["max_image_dimension"]
+            if slider and spinbox:
+                slider.blockSignals(True)
+                spinbox.blockSignals(True)
+                slider.setValue(max_dim)
+                spinbox.setValue(max_dim)
+                slider.blockSignals(False)
+                spinbox.blockSignals(False)
+        
+        # Update preprocessing widgets
+        pp_config = self.config.get("preprocessing", {})
+        for key in ["binary_threshold", "contrast", "brightness", "dilation"]:
+            widget_key = f"preprocessing.{key}"
+            if widget_key in self._config_widgets:
+                slider, spinbox, _ = self._config_widgets[widget_key]
+                if slider and spinbox:
+                    val = pp_config.get(key, 0)
+                    # Determine scale based on key
+                    if key == "contrast":
+                        scale = 10.0
+                        s_val = int(val * scale)
+                    else:
+                        scale = 1.0
+                        s_val = int(val)
+                    
+                    slider.blockSignals(True)
+                    spinbox.blockSignals(True)
+                    slider.setValue(s_val)
+                    spinbox.setValue(val)
+                    slider.blockSignals(False)
+                    spinbox.blockSignals(False)
+        
+        # Update invert combo
+        if "preprocessing.invert" in self._config_widgets:
+            _, _, combo = self._config_widgets["preprocessing.invert"]
+            if combo:
+                invert_val = pp_config.get("invert", False)
+                combo.blockSignals(True)
+                combo.setCurrentIndex(1 if invert_val else 0)
+                combo.blockSignals(False)
+        
+        # Update text_detection widgets
+        td_config = self.config.get("text_detection", {})
+        for key in ["min_height_ratio", "median_height_fraction", "merge_vertical_ratio", 
+                    "merge_horizontal_ratio", "merge_width_ratio_threshold"]:
+            widget_key = f"text_detection.{key}"
+            if widget_key in self._config_widgets:
+                slider, spinbox, _ = self._config_widgets[widget_key]
+                if slider and spinbox:
+                    val = td_config.get(key, 0.0)
+                    # Determine scale based on key
+                    if key == "min_height_ratio":
+                        scale = 1000  # per-mille
+                        s_val = int(val * scale)
+                    elif key in ["merge_vertical_ratio", "merge_horizontal_ratio", "merge_width_ratio_threshold"]:
+                        scale = 100
+                        s_val = int(val * scale)
+                    elif key == "median_height_fraction":
+                        scale = 100
+                        s_val = int(val * scale)
+                    else:
+                        scale = 1
+                        s_val = int(val)
+                    
+                    slider.blockSignals(True)
+                    spinbox.blockSignals(True)
+                    if 0 <= s_val <= slider.maximum():
+                        slider.setValue(s_val)
+                    spinbox.setValue(val)
+                    slider.blockSignals(False)
+                    spinbox.blockSignals(False)
+        
+        # Update text_sorting widgets
+        sort_config = self.config.get("text_sorting", {})
+        if "text_sorting.group_tolerance" in self._config_widgets:
+            slider, spinbox, _ = self._config_widgets["text_sorting.group_tolerance"]
+            if slider and spinbox:
+                val = sort_config.get("group_tolerance", 0.5)
+                slider.blockSignals(True)
+                spinbox.blockSignals(True)
+                slider.setValue(int(val * 10))
+                spinbox.setValue(val)
+                slider.blockSignals(False)
+                spinbox.blockSignals(False)
+        
+        # Update TTS widgets
+        tts_config = self.config.get("tts", {})
+        if hasattr(self, 'voice_combo') and self.voice_combo:
+            voice_code = tts_config.get("voice", "af_heart")
+            index = self.voice_combo.findData(voice_code)
+            if index >= 0:
+                self.voice_combo.blockSignals(True)
+                self.voice_combo.setCurrentIndex(index)
+                self.voice_combo.blockSignals(False)
+        
+        if hasattr(self, 'sl_speed') and hasattr(self, 'sp_speed'):
+            speed = tts_config.get("speed", 1.0)
+            self.sl_speed.blockSignals(True)
+            self.sp_speed.blockSignals(True)
+            self.sl_speed.setValue(int(speed * 10))
+            self.sp_speed.setValue(speed)
+            self.sl_speed.blockSignals(False)
+            self.sp_speed.blockSignals(False)
+        
+        if hasattr(self, 'sl_volume') and hasattr(self, 'sp_volume'):
+            volume = tts_config.get("volume", 1.0) * 100  # Convert to percentage
+            self.sl_volume.blockSignals(True)
+            self.sp_volume.blockSignals(True)
+            self.sl_volume.setValue(int(volume))
+            self.sp_volume.setValue(int(volume))
+            self.sl_volume.blockSignals(False)
+            self.sp_volume.blockSignals(False)
+        
+        # Update text sorting combo
+        if hasattr(self, 'order_combo') and self.order_combo:
+            sort_dir = sort_config.get("direction", "horizontal_ltr")
+            idx = self.order_combo.findData(sort_dir)
+            if idx >= 0:
+                self.order_combo.blockSignals(True)
+                self.order_combo.setCurrentIndex(idx)
+                self.order_combo.blockSignals(False)
+        
+        # Update manual boxes
+        if "manual_boxes" in self.config:
+            try:
+                loaded_boxes = [tuple(box) for box in self.config["manual_boxes"]]
+                state.manual_boxes = loaded_boxes
+                self.draw_manual_boxes()
+            except Exception:
+                print("Failed to load manual boxes from config")
+        
+        # Update visualizers
+        if hasattr(self, 'settings_viz'):
+            # Update detection viz
+            min_h_ratio = td_config.get("min_height_ratio", 0.031)
+            h = int(1080 * min_h_ratio)  # Estimate for visualization
+            w = h
+            self.settings_viz.update_detection(w, h)
+            
+            # Update merge viz
+            v_ratio = td_config.get("merge_vertical_ratio", 0.07)
+            h_ratio = td_config.get("merge_horizontal_ratio", 0.37)
+            rat = td_config.get("merge_width_ratio_threshold", 0.75)
+            vt = int(v_ratio * 20)
+            ht = int(h_ratio * 20)
+            self.settings_viz.update_merge(vt, ht, rat)
+
     def save_config(self):
-        """Save config to file"""
+        """Save current config to the active profile"""
+        # Get current active profile name
+        data = load_profiles()
+        active_name = data.get("active", "Default")
+        
+        # Default profile is read-only - don't save changes to it
+        if active_name == "Default":
+            # Changes to Default are temporary until user duplicates it
+            return
+        
+        # Save to user profile
         try:
-            with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-                json.dump(self.config, f, indent=4)
+            data["profiles"][active_name] = self.config.copy()
+            save_profiles(data)
         except Exception as e:
-            print(f"Error saving config: {e}")
+            print(f"Error saving profile '{active_name}': {e}")
 
     def setup_hotkey_listener(self):
         """Setup global hotkey listener in background thread"""
@@ -1531,6 +2157,12 @@ class OCRWindow(QMainWindow):
             self.status_label.setText(f"Done! Reading {len(text)} chars aloud...")
         else:
             self.status_label.setText("Detection complete (no text extracted)")
+        
+        # Update phoneme display from state
+        if hasattr(state, 'last_phonemes') and state.last_phonemes:
+            self.phoneme_output.setText(state.last_phonemes)
+        else:
+            self.phoneme_output.setText("")
 
     def on_worker_error(self, err: str):
         """Handle worker error"""

@@ -4,6 +4,7 @@ from queue import Queue
 from PIL import Image
 import hashlib
 import json
+import numpy as np
 
 
 class AppState:
@@ -28,6 +29,10 @@ class AppState:
         self.selection_base_state: bool = True  # True = Select All (White), False = Deselect All (Black)
         self.selection_ops: List[Dict] = []  # List of {"op": "add"|"sub", "rect": (x,y,w,h)} normalized 0-1
         self.manual_boxes: List[Tuple[float, float, float, float]] = []  # Manual boxes in normalized coordinates (x, y, w, h)
+        
+        # TTS State (for replay and phoneme display)
+        self.last_audio_data: Optional[np.ndarray] = None  # Last generated audio for replay
+        self.last_phonemes: str = ""  # Last generated phonemes (IPA) for display
 
     def reset_detections(self):
         """Reset detections when new screenshot is captured"""
