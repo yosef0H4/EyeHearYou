@@ -894,7 +894,7 @@ class OCRWindow(QMainWindow):
         # Reset button for Colors
         def reset_invert():
             default_val = self.DEFAULT_CONFIG["preprocessing"].get("invert", False)
-            chk_invert.setCurrentIndex(1 if default_val else 0)
+            self.chk_invert.setCurrentIndex(1 if default_val else 0)
             self.update_pp("invert", default_val)
         inv_reset = self.create_reset_button(reset_invert)
         inv_layout.addWidget(inv_reset)
