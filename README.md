@@ -177,7 +177,7 @@ Settings are saved per profile in `profiles.json` (or use the embedded Default p
 - **preprocessing**: Adjusts image contrast/brightness before OCR (useful for transparent text boxes).
   - *binary_threshold*: Binarization threshold (0-255, 0=disabled)
   - *invert*: Invert colors (useful for dark text on light backgrounds)
-  - *dilation*: Thicken text (0-5, useful for thin fonts)
+  - *dilation*: Text thickness (-5 to 5, negative values thin text, positive values thicken text, useful for adjusting font thickness)
   - *contrast*: Contrast multiplier (0.5-3.0)
   - *brightness*: Brightness adjustment (-100 to 100)
 - **text_detection**:

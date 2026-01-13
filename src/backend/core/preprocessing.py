@@ -52,6 +52,7 @@ def process_image(pil_image, config):
     brightness = settings.get("brightness", 0) # 0 = normal
     
     # If no settings are active, return original
+    # Note: dilation == 0 means no dilation/erosion applied
     if binary_threshold == 0 and not invert and dilation == 0 and contrast == 1.0 and brightness == 0:
         return pil_image
 
@@ -80,10 +81,14 @@ def process_image(pil_image, config):
     if invert:
         img = cv2.bitwise_not(img)
 
-    # 4. Dilation (Thicken text)
-    if dilation > 0:
+    # 4. Dilation/Erosion (Thicken/Thin text)
+    # Positive values: dilate (thicken), Negative values: erode (thin)
+    if dilation != 0:
         kernel = np.ones((2, 2), np.uint8)
-        img = cv2.dilate(img, kernel, iterations=dilation)
+        if dilation > 0:
+            img = cv2.dilate(img, kernel, iterations=dilation)
+        else:
+            img = cv2.erode(img, kernel, iterations=abs(dilation))
 
     # Convert back to PIL
     # OpenCV BGR -> PIL RGB

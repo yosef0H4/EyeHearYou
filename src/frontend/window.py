@@ -98,6 +98,10 @@ class OCRWindow(QMainWindow):
             "label_voice": "Voice:",
             "label_speed": "Speed:",
             "label_volume": "Volume:",
+            "label_binary_threshold": "Bin. Threshold:",
+            "label_contrast": "Contrast:",
+            "label_brightness": "Brightness:",
+            "label_dilation": "Text Thickness:",
             "btn_play": "▶ Play",
             "btn_play_tooltip": "Re-generate and play TTS with current voice/speed settings",
             "btn_replay": "🔁 Replay",
@@ -168,6 +172,10 @@ class OCRWindow(QMainWindow):
             "label_voice": "الصوت:",
             "label_speed": "السرعة:",
             "label_volume": "مستوى الصوت:",
+            "label_binary_threshold": "عتبة الثنائية:",
+            "label_contrast": "التباين:",
+            "label_brightness": "السطوع:",
+            "label_dilation": "سُمك النص:",
             "btn_play": "▶ تشغيل",
             "btn_play_tooltip": "إعادة توليد وتشغيل تحويل النص إلى كلام بالإعدادات الحالية للصوت/السرعة",
             "btn_replay": "🔁 إعادة التشغيل",
@@ -869,7 +877,14 @@ class OCRWindow(QMainWindow):
         def add_slider_row(label, key, min_v, max_v, default, scale=1.0, is_float=False):
             row = QHBoxLayout()
             row.setSpacing(8)
-            row.addWidget(QLabel(label))
+            label_widget = QLabel(label)
+            row.addWidget(label_widget)
+            
+            # Store label reference for language switching
+            label_key = f"label_{key}" if key != "dilation" else "label_dilation"
+            if not hasattr(self, '_preprocessing_labels'):
+                self._preprocessing_labels = {}
+            self._preprocessing_labels[label_key] = label_widget
             
             slider = QSlider(Qt.Orientation.Horizontal)
             # Map float to int for slider if needed
@@ -963,16 +978,17 @@ class OCRWindow(QMainWindow):
         g_layout.addLayout(inv_layout)
 
         # 2. Threshold
-        add_slider_row("Bin. Threshold:", "binary_threshold", 0, 255, 0)
+        add_slider_row(self.TRANSLATIONS[self.ui_lang]["label_binary_threshold"], "binary_threshold", 0, 255, 0)
         
         # 3. Contrast
-        add_slider_row("Contrast:", "contrast", 0.5, 3.0, 1.0, scale=10.0, is_float=True)
+        add_slider_row(self.TRANSLATIONS[self.ui_lang]["label_contrast"], "contrast", 0.5, 3.0, 1.0, scale=10.0, is_float=True)
         
         # 4. Brightness
-        add_slider_row("Brightness:", "brightness", -100, 100, 0)
+        add_slider_row(self.TRANSLATIONS[self.ui_lang]["label_brightness"], "brightness", -100, 100, 0)
         
-        # 5. Dilation
-        add_slider_row("Thicken Text:", "dilation", 0, 5, 0)
+        # 5. Dilation/Erosion (Thicken/Thin text)
+        # Negative values thin text, positive values thicken text
+        add_slider_row(self.TRANSLATIONS[self.ui_lang]["label_dilation"], "dilation", -5, 5, 0)
 
         self.image_settings_group.setLayout(g_layout)
         layout.addWidget(self.image_settings_group)
@@ -1226,7 +1242,7 @@ class OCRWindow(QMainWindow):
         self.order_combo.addItem(self.TRANSLATIONS[self.ui_lang]["order_vertical_rtl"], "vertical_rtl")
         self.order_combo.addItem(self.TRANSLATIONS[self.ui_lang]["order_vertical_ltr"], "vertical_ltr")
         
-        cur_dir = sort_config.get("direction", "horizontal_ltr")
+        cur_dir = sort_config.get("direction") or "horizontal_ltr"
         idx = self.order_combo.findData(cur_dir)
         if idx >= 0: self.order_combo.setCurrentIndex(idx)
         self.order_combo.currentIndexChanged.connect(self.on_order_changed)
@@ -1861,7 +1877,7 @@ class OCRWindow(QMainWindow):
         
         # Update text sorting combo
         if hasattr(self, 'order_combo') and self.order_combo:
-            sort_dir = sort_config.get("direction", "horizontal_ltr")
+            sort_dir = sort_config.get("direction") or "horizontal_ltr"
             idx = self.order_combo.findData(sort_dir)
             if idx >= 0:
                 self.order_combo.blockSignals(True)
@@ -2358,7 +2374,7 @@ class OCRWindow(QMainWindow):
             return
         
         sort_config = self.config.get("text_sorting", {})
-        direction = sort_config.get("direction", "horizontal_ltr")
+        direction = sort_config.get("direction") or "horizontal_ltr"
         group_tol = sort_config.get("group_tolerance", 0.5)
         
         # 1. Draw Flow Path (Connecting centers with arrows)
@@ -2817,6 +2833,18 @@ class OCRWindow(QMainWindow):
             self.label_max_dimension.setText(t["label_max_dimension"])
         if hasattr(self, 'label_colors'):
             self.label_colors.setText(t["label_colors"])
+        
+        # Update preprocessing labels
+        if hasattr(self, '_preprocessing_labels'):
+            if "label_binary_threshold" in self._preprocessing_labels:
+                self._preprocessing_labels["label_binary_threshold"].setText(t["label_binary_threshold"])
+            if "label_contrast" in self._preprocessing_labels:
+                self._preprocessing_labels["label_contrast"].setText(t["label_contrast"])
+            if "label_brightness" in self._preprocessing_labels:
+                self._preprocessing_labels["label_brightness"].setText(t["label_brightness"])
+            if "label_dilation" in self._preprocessing_labels:
+                self._preprocessing_labels["label_dilation"].setText(t["label_dilation"])
+        
         if hasattr(self, 'chk_invert'):
             # Update combo box items
             current_index = self.chk_invert.currentIndex()

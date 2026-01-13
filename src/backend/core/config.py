@@ -15,7 +15,7 @@ FACTORY_DEFAULT = {
     "preprocessing": {
         "binary_threshold": 0,    # 0-255, 0=disabled
         "invert": False,
-        "dilation": 0,            # 0-5
+        "dilation": 0,            # -5 to 5 (negative=thin, positive=thicken)
         "contrast": 1.0,          # 0.5 - 3.0
         "brightness": 0           # -100 to 100
     },
