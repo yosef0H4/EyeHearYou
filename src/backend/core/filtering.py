@@ -1,5 +1,9 @@
 """Text region filtering and sorting"""
 import numpy as np
+try:
+    import cv2
+except ImportError:
+    cv2 = None
 
 
 def sort_text_regions_by_reading_order(text_regions, direction='horizontal_ltr', group_tolerance=0.5):
@@ -192,5 +196,108 @@ def filter_text_regions(text_regions, image_shape, min_width_ratio=0.0, min_heig
         
     return filtered
 
+
+def generate_selection_mask(image_shape, selection_ops, base_state=True):
+    """
+    Generate a binary mask (255=Keep, 0=Discard) based on selection operations.
+    Ops are normalized coordinates (0-1).
+    
+    Args:
+        image_shape: Tuple (height, width) of the image
+        selection_ops: List of {"op": "add"|"sub", "rect": (x,y,w,h)} normalized 0-1
+        base_state: True = Select All (White), False = Deselect All (Black)
+    
+    Returns:
+        Binary mask as numpy array (255=Keep, 0=Discard), or None if cv2 unavailable
+    """
+    if cv2 is None:
+        return None
+
+    h, w = image_shape[:2]
+    # Start with base state
+    initial_color = 255 if base_state else 0
+    mask = np.full((h, w), initial_color, dtype=np.uint8)
+    
+    for op in selection_ops:
+        mode = op['op']
+        nx, ny, nw, nh = op['rect']
+        
+        # Convert normalized to pixel
+        x1 = int(nx * w)
+        y1 = int(ny * h)
+        x2 = int((nx + nw) * w)
+        y2 = int((ny + nh) * h)
+        
+        # Clamp
+        x1, x2 = max(0, x1), min(w, x2)
+        y1, y2 = max(0, y1), min(h, y2)
+        
+        if x2 > x1 and y2 > y1:
+            color = 255 if mode == 'add' else 0
+            cv2.rectangle(mask, (x1, y1), (x2, y2), color, -1)
+        
+    return mask
+
+
+def filter_regions_by_mask(regions, mask, threshold=0.1):
+    """
+    Filter text regions. Keep if > threshold of the region is white in the mask.
+    
+    Args:
+        regions: List of (x1, y1, x2, y2) bounding boxes
+        mask: Binary mask (255=Keep, 0=Discard)
+        threshold: Minimum ratio of white pixels to keep region (default 0.1 = 10%)
+    
+    Returns:
+        Filtered list of bounding boxes
+    """
+    if not regions or mask is None or cv2 is None:
+        return regions
+        
+    filtered = []
+    for box in regions:
+        x1, y1, x2, y2 = box
+        # Clamp
+        x1, x2 = max(0, x1), min(mask.shape[1], x2)
+        y1, y2 = max(0, y1), min(mask.shape[0], y2)
+        
+        if x2 <= x1 or y2 <= y1:
+            continue
+            
+        # Crop mask area
+        mask_roi = mask[y1:y2, x1:x2]
+        if mask_roi.size == 0:
+            continue
+            
+        # Calculate white pixel ratio
+        white_pixels = cv2.countNonZero(mask_roi)
+        total_pixels = mask_roi.size
+        
+        if (white_pixels / total_pixels) > threshold:
+            filtered.append(box)
+            
+    return filtered
+
+
+def get_regions_from_mask(mask):
+    """
+    Convert white areas in mask to bounding boxes (Manual Mode).
+    
+    Args:
+        mask: Binary mask (255=Keep, 0=Discard)
+    
+    Returns:
+        List of (x1, y1, x2, y2) bounding boxes
+    """
+    if mask is None or cv2 is None:
+        return []
+
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    regions = []
+    for cnt in contours:
+        x, y, w, h = cv2.boundingRect(cnt)
+        if w > 4 and h > 4:  # Min size filter
+            regions.append((x, y, x + w, y + h))
+    return regions
 
 

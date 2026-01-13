@@ -7,17 +7,22 @@ from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QSlider, QGroupBox, QPushButton, QTextEdit, QProgressBar,
     QGraphicsView, QGraphicsScene, QSplitter, QLineEdit, QSpinBox, QDoubleSpinBox,
-    QGraphicsTextItem, QGraphicsPixmapItem, QScrollArea, QComboBox, QFrame
+    QGraphicsTextItem, QGraphicsPixmapItem, QScrollArea, QComboBox, QFrame,
+    QRadioButton, QButtonGroup, QCheckBox, QToolButton
 )
-from PyQt6.QtCore import Qt, QTimer, QRect, QEvent
+from PyQt6.QtCore import Qt, QTimer, QRect, QEvent, QPointF, QRectF
 from PyQt6.QtGui import QPixmap, QImage, QPen, QColor, QBrush, QPainter, QFont, QPainterPath
 
 from src.backend.core.config import load_config, CONFIG_FILE
 from src.backend.core.capture import capture_screenshot
 from src.backend.state import state
-from src.backend.core.filtering import filter_text_regions, sort_text_regions_by_reading_order
+from src.backend.core.filtering import (
+    filter_text_regions, 
+    sort_text_regions_by_reading_order,
+    generate_selection_mask
+)
 from src.backend.core.merging import merge_close_text_boxes
-from src.frontend.widgets import UnifiedSettingsViz, ResizeVizWidget
+from src.frontend.widgets import UnifiedSettingsViz, ResizeVizWidget, ManualBoxItem
 from src.frontend.worker import OCRWorker
 from src.frontend.theme import DARK_THEME_STYLESHEET
 from src.frontend.constants import KEYBOARD_AVAILABLE, keyboard
@@ -60,6 +65,14 @@ class OCRWindow(QMainWindow):
         self.filtered_boxes: List[Tuple[int, int, int, int]] = []
         self.merged_boxes: List[dict] = []  # List of dicts with 'rect', 'count', 'originalBoxes'
         self.pixmap_item = None  # Store reference to pixmap item
+        self.manual_box_items = []  # Keep track of visual items for manual boxes
+        
+        # Selection Tool State
+        self.tool_mode = "none"  # "none", "add", "sub", "manual"
+        self.is_drawing = False
+        self.start_point = QPointF()
+        self.current_rect_item = None
+        self.selection_overlay_item = None
 
         # Setup hotkey listener
         self.setup_hotkey_listener()
@@ -93,6 +106,9 @@ class OCRWindow(QMainWindow):
         model_info = QLabel("Model: H2OVL-Mississippi-0.8B (Local)")
         model_info.setStyleSheet("font-weight: bold; color: #4CAF50; padding: 5px;")
         controls_layout.addWidget(model_info)
+
+        # NEW: Selection Tools Group
+        self.create_selection_group(controls_layout)
 
         # 2. Image Adjustments Group (Consolidated)
         self.create_image_settings_group(controls_layout)
@@ -158,8 +174,8 @@ class OCRWindow(QMainWindow):
         self.scene = QGraphicsScene()
         self.view = QGraphicsView(self.scene)
         self.view.setRenderHints(QPainter.RenderHint.Antialiasing)
-        self.view.setDragMode(QGraphicsView.DragMode.RubberBandDrag)
-        # Connect view resize to update fit
+        # Mouse Event Handling for Tools
+        self.view.setMouseTracking(True)
         self.view.viewport().installEventFilter(self)
         preview_layout.addWidget(self.view)
 
@@ -170,6 +186,125 @@ class OCRWindow(QMainWindow):
 
         # Apply dark theme
         self.apply_dark_theme()
+
+
+    def create_selection_group(self, layout):
+        """Create Selection Tools Group"""
+        group = QGroupBox("Selection Tools")
+        g_layout = QVBoxLayout()
+        
+        # 1. RapidOCR Toggle
+        self.chk_rapid = QCheckBox("Use Smart Detection (RapidOCR)")
+        self.chk_rapid.setChecked(state.use_rapidocr)
+        self.chk_rapid.setToolTip("Uncheck to manually select text areas")
+        self.chk_rapid.toggled.connect(self.on_rapid_toggled)
+        g_layout.addWidget(self.chk_rapid)
+        
+        # 2. Tools Toolbar
+        tools_layout = QHBoxLayout()
+        
+        self.btn_tool_none = QPushButton("✋ View")
+        self.btn_tool_none.setCheckable(True)
+        self.btn_tool_none.setChecked(True)
+        self.btn_tool_none.clicked.connect(lambda: self.set_tool("none"))
+        
+        self.btn_tool_add = QPushButton("➕ Add Area")
+        self.btn_tool_add.setCheckable(True)
+        self.btn_tool_add.clicked.connect(lambda: self.set_tool("add"))
+        
+        self.btn_tool_sub = QPushButton("➖ Remove Area")
+        self.btn_tool_sub.setCheckable(True)
+        self.btn_tool_sub.clicked.connect(lambda: self.set_tool("sub"))
+        
+        self.btn_tool_manual = QPushButton("📦 Manual Box")
+        self.btn_tool_manual.setCheckable(True)
+        self.btn_tool_manual.clicked.connect(lambda: self.set_tool("manual"))
+        
+        # Group for exclusive checking
+        self.tool_group = QButtonGroup(self)
+        self.tool_group.addButton(self.btn_tool_none)
+        self.tool_group.addButton(self.btn_tool_add)
+        self.tool_group.addButton(self.btn_tool_sub)
+        self.tool_group.addButton(self.btn_tool_manual)
+        
+        tools_layout.addWidget(self.btn_tool_none)
+        tools_layout.addWidget(self.btn_tool_add)
+        tools_layout.addWidget(self.btn_tool_sub)
+        tools_layout.addWidget(self.btn_tool_manual)
+        g_layout.addLayout(tools_layout)
+        
+        # 3. Actions
+        actions_layout = QHBoxLayout()
+        
+        btn_sel_all = QPushButton("Select All")
+        btn_sel_all.clicked.connect(self.select_all)
+        
+        btn_desel_all = QPushButton("Deselect All")
+        btn_desel_all.clicked.connect(self.deselect_all)
+        
+        actions_layout.addWidget(btn_sel_all)
+        actions_layout.addWidget(btn_desel_all)
+        g_layout.addLayout(actions_layout)
+        
+        group.setLayout(g_layout)
+        layout.addWidget(group)
+
+    def on_rapid_toggled(self, checked):
+        state.use_rapidocr = checked
+        if state.last_image:
+            self.run_detection_preview()
+
+    def set_tool(self, mode):
+        self.tool_mode = mode
+        if mode == "none":
+            self.view.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
+        else:
+            self.view.setDragMode(QGraphicsView.DragMode.NoDrag)
+
+    def select_all(self):
+        state.selection_ops = []
+        state.selection_base_state = True
+        self.update_selection_overlay()
+        self.run_detection_preview()
+
+    def deselect_all(self):
+        state.selection_ops = []
+        state.selection_base_state = False
+        self.update_selection_overlay()
+        self.run_detection_preview()
+
+    def update_selection_overlay(self):
+        """Draw semi-transparent overlay to indicate selection state"""
+        if not self.pixmap_item:
+            return
+            
+        # Remove old overlay
+        if self.selection_overlay_item:
+            self.scene.removeItem(self.selection_overlay_item)
+            self.selection_overlay_item = None
+            
+        img_w = self.pixmap_item.pixmap().width()
+        img_h = self.pixmap_item.pixmap().height()
+        
+        # Generate mask
+        mask = generate_selection_mask((img_h, img_w), state.selection_ops, state.selection_base_state)
+        if mask is None:
+            return
+
+        # Convert mask to QImage
+        import numpy as np
+        overlay = np.zeros((img_h, img_w, 4), dtype=np.uint8)
+        
+        # Set alpha: 150 where mask is 0, 0 where mask is 255
+        overlay[mask == 0, 3] = 150  # Darken excluded
+        overlay[mask == 255, 3] = 0  # Transparent included
+        
+        qimg = QImage(overlay.data, img_w, img_h, QImage.Format.Format_RGBA8888)
+        pix = QPixmap.fromImage(qimg)
+        
+        self.selection_overlay_item = QGraphicsPixmapItem(pix)
+        self.selection_overlay_item.setZValue(50)  # Above image, below boxes
+        self.scene.addItem(self.selection_overlay_item)
 
 
     def create_image_settings_group(self, layout):
@@ -824,7 +959,9 @@ class OCRWindow(QMainWindow):
         self.raw_boxes = []
         self.filtered_boxes = []
         self.merged_boxes = []
+        self.manual_box_items = []  # Clear references
         self.pixmap_item = None  # Reset reference
+        self.selection_overlay_item = None
 
         # Convert PIL to QPixmap
         im_data = pil_image.convert("RGBA").tobytes("raw", "RGBA")
@@ -832,6 +969,13 @@ class OCRWindow(QMainWindow):
         pix = QPixmap.fromImage(qim)
         self.pixmap_item = self.scene.addPixmap(pix)
         self.scene.setSceneRect(self.pixmap_item.boundingRect())
+        
+        # Draw initial selection overlay
+        self.update_selection_overlay()
+        
+        # Draw existing manual boxes from state
+        self.draw_manual_boxes()
+        
         self.fit_image_to_view()
 
     def clear_all_boxes(self):
@@ -843,9 +987,12 @@ class OCRWindow(QMainWindow):
         items_list = self.scene.items()
         
         for item in items_list:
-            # Keep only the pixmap item (by reference and type check)
-            if item != self.pixmap_item and not isinstance(item, QGraphicsPixmapItem):
-                items_to_remove.append(item)
+            # Keep pixmap, overlay, and manual boxes
+            is_manual = isinstance(item, ManualBoxItem) or item in self.manual_box_items
+            if item != self.pixmap_item and item != self.selection_overlay_item and not is_manual:
+                # Also check if it's the current drawing rect
+                if item != self.current_rect_item:
+                    items_to_remove.append(item)
         
         for item in items_to_remove:
             self.scene.removeItem(item)
@@ -1284,6 +1431,9 @@ class OCRWindow(QMainWindow):
             self.draw_filtered_boxes(self.filtered_boxes)
         if self.merged_boxes:
             self.draw_merged_boxes(self.merged_boxes)
+            
+        # Ensure manual boxes are always visible and on top
+        self.draw_manual_boxes()
 
     def run_detection_preview(self):
         """Run detection only (for preview)"""
@@ -1374,11 +1524,128 @@ class OCRWindow(QMainWindow):
         QTimer.singleShot(0, self.fit_image_to_view)
 
     def eventFilter(self, obj, event):
-        """Filter events to handle viewport resize"""
-        if obj == self.view.viewport() and event.type() == QEvent.Type.Resize:
-            # Viewport resized, refit image
-            QTimer.singleShot(0, self.fit_image_to_view)
+        """Filter events to handle viewport resize and mouse tools"""
+        if obj == self.view.viewport():
+            if event.type() == QEvent.Type.Resize:
+                QTimer.singleShot(0, self.fit_image_to_view)
+                
+            # MOUSE TOOLS LOGIC
+            elif self.tool_mode != "none" and self.pixmap_item:
+                if event.type() == QEvent.Type.MouseButtonPress and event.button() == Qt.MouseButton.LeftButton:
+                    self.is_drawing = True
+                    self.start_point = self.view.mapToScene(event.pos())
+                    return True
+                    
+                elif event.type() == QEvent.Type.MouseMove and self.is_drawing:
+                    current_point = self.view.mapToScene(event.pos())
+                    rect = QRectF(self.start_point, current_point).normalized()
+                    
+                    if not self.current_rect_item:
+                        if self.tool_mode == "add":
+                            pen_color = QColor(0, 255, 0)
+                        elif self.tool_mode == "sub":
+                            pen_color = QColor(255, 0, 0)
+                        else:  # manual
+                            pen_color = QColor(0, 100, 255)
+                        self.current_rect_item = self.scene.addRect(rect, QPen(pen_color, 2))
+                        self.current_rect_item.setZValue(1000)
+                    else:
+                        self.current_rect_item.setRect(rect)
+                    return True
+                    
+                elif event.type() == QEvent.Type.MouseButtonRelease and event.button() == Qt.MouseButton.LeftButton and self.is_drawing:
+                    self.is_drawing = False
+                    end_point = self.view.mapToScene(event.pos())
+                    
+                    # Calculate normalized rect
+                    img_w = self.pixmap_item.pixmap().width()
+                    img_h = self.pixmap_item.pixmap().height()
+                    
+                    rect_f = QRectF(self.start_point, end_point).normalized()
+                    
+                    # Convert to normalized 0-1
+                    nx = max(0, rect_f.x() / img_w)
+                    ny = max(0, rect_f.y() / img_h)
+                    nw = min(1.0 - nx, rect_f.width() / img_w)
+                    nh = min(1.0 - ny, rect_f.height() / img_h)
+                    
+                    if nw > 0.001 and nh > 0.001:  # Min size check
+                        if self.tool_mode == "manual":
+                            # Add manual box in pixel coordinates
+                            # rect_f is in scene coordinates, which should match image pixels
+                            # since pixmap is at (0,0) in scene
+                            x1 = max(0, int(rect_f.x()))
+                            y1 = max(0, int(rect_f.y()))
+                            x2 = min(img_w, int(rect_f.x() + rect_f.width()))
+                            y2 = min(img_h, int(rect_f.y() + rect_f.height()))
+                            
+                            # Ensure valid box
+                            if x2 > x1 and y2 > y1:
+                                box = (x1, y1, x2, y2)
+                                # Avoid duplicates
+                                if box not in state.manual_boxes:
+                                    state.manual_boxes.append(box)
+                                    # Redraw manual boxes immediately
+                                    self.draw_manual_boxes()
+                                    self.run_detection_preview()
+                        else:
+                            # Add selection operation
+                            op = {
+                                "op": self.tool_mode,
+                                "rect": (nx, ny, nw, nh)
+                            }
+                            state.selection_ops.append(op)
+                            self.update_selection_overlay()
+                            self.run_detection_preview()
+                    
+                    # Remove temp item
+                    if self.current_rect_item:
+                        self.scene.removeItem(self.current_rect_item)
+                        self.current_rect_item = None
+                    
+                    return True
+
         return super().eventFilter(obj, event)
+
+    def draw_manual_boxes(self):
+        """Draw manual boxes from state"""
+        # First remove existing manual box items to avoid duplicates
+        for item in self.manual_box_items[:]:  # Copy list to avoid modification during iteration
+            if item.scene() == self.scene:
+                self.scene.removeItem(item)
+        self.manual_box_items.clear()
+        
+        if not self.pixmap_item:
+            return
+            
+        for rect in state.manual_boxes:
+            x1, y1, x2, y2 = rect
+            w, h = x2 - x1, y2 - y1
+            
+            item = ManualBoxItem(QRectF(float(x1), float(y1), float(w), float(h)), self.remove_manual_box)
+            self.scene.addItem(item)
+            self.manual_box_items.append(item)
+
+    def remove_manual_box(self, item: ManualBoxItem):
+        """Callback to remove a manual box"""
+        # Find rect in state
+        rect = item.rect()
+        x1, y1 = int(rect.x()), int(rect.y())
+        x2, y2 = int(rect.x() + rect.width()), int(rect.y() + rect.height())
+        target = (x1, y1, x2, y2)
+        
+        # Remove from state
+        if target in state.manual_boxes:
+            state.manual_boxes.remove(target)
+            
+        # Remove from scene
+        if item in self.manual_box_items:
+            self.manual_box_items.remove(item)
+        self.scene.removeItem(item)
+            
+        # Re-run preview to update results
+        if state.last_image:
+            self.run_detection_preview()
 
     def apply_dark_theme(self):
         """Apply dark theme using built-in QSS (no external dependencies)"""

@@ -1,6 +1,6 @@
 """Custom widgets for the OCR GUI"""
-from PyQt6.QtWidgets import QWidget
-from PyQt6.QtCore import Qt, QRect
+from PyQt6.QtWidgets import QWidget, QGraphicsRectItem, QGraphicsTextItem, QGraphicsItem
+from PyQt6.QtCore import Qt, QRect, QRectF
 from PyQt6.QtGui import QPainter, QPen, QColor, QBrush, QFont, QPixmap
 
 
@@ -134,6 +134,88 @@ class MergeVizWidget(QWidget):
             painter.setFont(font)
             painter.drawText(QRect(int(ratio_x), int(box_y), int(ratio_w), base_h), 
                            Qt.AlignmentFlag.AlignCenter, "MIN")
+
+
+class ManualBoxItem(QGraphicsRectItem):
+    """
+    Interactive manual box with a delete button.
+    """
+    def __init__(self, rect, on_delete_callback=None):
+        super().__init__(rect)
+        self.on_delete_callback = on_delete_callback
+        
+        # Style
+        self.setPen(QPen(QColor(0, 100, 255), 2))
+        self.setBrush(QBrush(QColor(0, 100, 255, 30)))
+        self.setZValue(1000)  # High Z-value to sit on top
+        
+        # Make it selectable (but not movable)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
+        self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, False)  # Don't allow moving for now
+        
+        # Delete Button (X) - positioned at top-right
+        self.btn_size = 20
+        btn_rect = QRectF(
+            rect.x() + rect.width() - self.btn_size, 
+            rect.y(), 
+            self.btn_size, 
+            self.btn_size
+        )
+        self.delete_btn = QGraphicsRectItem(btn_rect, self)
+        self.delete_btn.setBrush(QBrush(QColor(255, 0, 0)))
+        self.delete_btn.setPen(QPen(Qt.PenStyle.NoPen))
+        self.delete_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.delete_btn.setZValue(1001)  # Above the box
+        # Make delete button accept mouse events
+        self.delete_btn.setAcceptHoverEvents(True)
+        
+        # X text
+        self.x_text = QGraphicsTextItem("×", self.delete_btn)
+        self.x_text.setDefaultTextColor(QColor(255, 255, 255))
+        font = QFont("Arial", 12, QFont.Weight.Bold)
+        self.x_text.setFont(font)
+        
+        # Center X in button
+        txt_rect = self.x_text.boundingRect()
+        btn_rect = self.delete_btn.rect()
+        self.x_text.setPos(
+            btn_rect.x() + (btn_rect.width() - txt_rect.width()) / 2,
+            btn_rect.y() + (btn_rect.height() - txt_rect.height()) / 2
+        )
+        self.x_text.setZValue(1002)
+        
+        # Enable hover events
+        self.setAcceptHoverEvents(True)
+
+    def hoverEnterEvent(self, event):
+        """Show delete button on hover"""
+        self.delete_btn.setVisible(True)
+        super().hoverEnterEvent(event)
+
+    def hoverLeaveEvent(self, event):
+        """Hide delete button when not hovering"""
+        self.delete_btn.setVisible(True)  # Keep visible for now, or set to False to hide
+        super().hoverLeaveEvent(event)
+
+    def mousePressEvent(self, event):
+        """Handle clicks on delete button"""
+        # Check if clicked on delete button (use scene coordinates)
+        del_rect = self.delete_btn.sceneBoundingRect()
+        scene_pos = event.scenePos()
+        if del_rect.contains(scene_pos):
+            if self.on_delete_callback:
+                self.on_delete_callback(self)
+            event.accept()
+            return
+        super().mousePressEvent(event)
+    
+    def shape(self):
+        """Return shape for hit testing - include delete button"""
+        from PyQt6.QtGui import QPainterPath
+        path = super().shape()
+        # Also include delete button in hit area
+        path.addRect(self.delete_btn.rect())
+        return path
 
 
 class UnifiedSettingsViz(QWidget):

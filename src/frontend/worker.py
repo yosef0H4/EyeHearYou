@@ -4,7 +4,13 @@ from PyQt6.QtCore import QThread, pyqtSignal
 from src.backend.core.config import load_config
 from src.backend.core.detection import detect_text_regions_unfiltered
 from src.backend.core.merging import merge_close_text_boxes
-from src.backend.core.filtering import filter_text_regions, sort_text_regions_by_reading_order
+from src.backend.core.filtering import (
+    filter_text_regions, 
+    sort_text_regions_by_reading_order,
+    generate_selection_mask,
+    filter_regions_by_mask,
+    get_regions_from_mask
+)
 from src.backend.core.extraction import crop_text_regions
 from src.backend.core.preprocessing import process_image
 from src.backend.state import state
@@ -44,51 +50,140 @@ class OCRWorker(QThread):
             # Use processed image for detection and extraction
             image = processed_image
             
-            # Run detection (with smart caching - only runs RapidOCR if preprocessing changed)
-            self.progress_signal.emit("Detecting text regions...", 10)
-            if self.is_cancelled:
-                return
+            # --- SELECTION & DETECTION LOGIC ---
+            img_height, img_width = image.size[1], image.size[0]
             
-            raw_detections_with_scores = detect_text_regions_unfiltered(image, config=self.config, use_cache=True)
+            # 1. Generate Mask
+            selection_mask = generate_selection_mask(
+                (img_height, img_width), 
+                state.selection_ops, 
+                state.selection_base_state
+            )
+
+            all_boxes = []
+            regions = []
+
+            if state.use_rapidocr:
+                # AUTOMATIC MODE (RapidOCR + Mask Filtering)
+                # Run detection (with smart caching - only runs RapidOCR if preprocessing changed)
+                self.progress_signal.emit("Detecting text regions...", 10)
+                if self.is_cancelled:
+                    return
+                
+                raw_detections_with_scores = detect_text_regions_unfiltered(image, config=self.config, use_cache=True)
+                
+                if self.is_cancelled:
+                    return
+                
+                if raw_detections_with_scores is None:
+                    self.error_signal.emit("Failed to detect text regions. Is RapidOCR installed?")
+                    return
+                
+                # Filter logic
+                if raw_detections_with_scores:
+                    # Extract raw boxes
+                    all_boxes = [bbox for bbox, score in raw_detections_with_scores]
+                    
+                    # A. Filter by Selection Mask
+                    self.progress_signal.emit("Filtering by selection...", 15)
+                    masked_boxes = filter_regions_by_mask(all_boxes, selection_mask)
+                    
+                    # B. Apply Size Filter
+                    self.progress_signal.emit("Applying size filter...", 20)
+                    min_width_ratio = td_config.get("min_width_ratio", 0.0)
+                    min_height_ratio = td_config.get("min_height_ratio", 0.0)
+                    median_height_fraction = td_config.get("median_height_fraction", 1.0)
+                    
+                    regions = filter_text_regions(
+                        masked_boxes,
+                        (img_height, img_width),
+                        min_width_ratio=min_width_ratio,
+                        min_height_ratio=min_height_ratio,
+                        median_height_fraction=median_height_fraction
+                    )
+                
+                # Always include manual boxes (even when RapidOCR is on)
+                # Manual boxes are user's explicit choice, so add them to results
+                if state.manual_boxes:
+                    # Add manual boxes to all_boxes for visualization
+                    all_boxes.extend(state.manual_boxes)
+                    # Add to regions (they bypass size filtering since user explicitly selected them)
+                    regions.extend(state.manual_boxes)
+            else:
+                # MANUAL MODE (No RapidOCR)
+                # Use manual boxes OR selection mask regions (whichever exists)
+                self.progress_signal.emit("Processing manual selection...", 10)
+                all_boxes = []
+                regions = []
+                
+                # Priority 1: Manual boxes (user-drawn boxes)
+                if state.manual_boxes:
+                    all_boxes.extend(state.manual_boxes)
+                    regions.extend(state.manual_boxes)
+                
+                # Priority 2: Selection mask regions (if user selected areas but no manual boxes)
+                # Only use mask if user has made explicit selection operations
+                # If no ops and base_state=True, mask would be all white (whole image) - skip that
+                elif selection_mask is not None and state.selection_ops:
+                    # User has made selection operations (add/sub), extract regions from mask
+                    manual_regions = get_regions_from_mask(selection_mask)
+                    all_boxes = manual_regions
+                    regions = manual_regions
+                elif selection_mask is not None and not state.selection_base_state:
+                    # User deselected all (base_state=False) but no ops yet
+                    # This means nothing is selected, so return empty
+                    all_boxes = []
+                    regions = []
+
+            # Handle case where no regions found
+            if not regions and state.use_rapidocr:
+                # If RapidOCR found nothing, or selection filtered everything out
+                # AND we are in full mode, maybe fallback? 
+                # But if user deselected everything, we shouldn't fallback to full image.
+                # If selection mask exists (not default), assume user Intent.
+                # Default selection (Select All) -> Fallback OK.
+                # Custom selection -> No Fallback.
+                is_default_selection = (state.selection_base_state is True and not state.selection_ops)
+                
+                if is_default_selection and not all_boxes:
+                    self.progress_signal.emit("No regions found, processing full image...", 20)
+                    # Fallback
+                    if self.mode == "full":
+                        from src.backend.core.extraction import extract_text_with_vision_api
+                        text = extract_text_with_vision_api(image, self.config)
+                        self.finished_signal.emit(all_boxes, [], [], text or "No text extracted.")
+                    else:
+                        self.finished_signal.emit(all_boxes, [], [], None)
+                    return
             
-            if self.is_cancelled:
-                return
-            
-            if raw_detections_with_scores is None:
-                self.error_signal.emit("Failed to detect text regions. Is RapidOCR installed?")
-                return
-            
-            if not raw_detections_with_scores:
-                # No detections at all
+            # If manual mode and no regions, just stop
+            if not regions and not state.use_rapidocr:
                 if self.mode == "full":
-                    from src.backend.core.extraction import extract_text_with_vision_api
-                    text = extract_text_with_vision_api(image, self.config)
-                    self.finished_signal.emit([], [], [], text or "No text extracted.")
+                    self.finished_signal.emit([], [], [], "No area selected.")
                 else:
                     self.finished_signal.emit([], [], [], None)
                 return
-            
-            # Extract raw boxes for UI
-            all_boxes = [bbox for bbox, score in raw_detections_with_scores]
-            
-            # Apply filters using adaptive parameters
-            # Note: RapidOCR doesn't provide confidence scores in detection-only mode,
-            # so we skip confidence filtering and only filter by size
-            img_height, img_width = image.size[1], image.size[0]
-            
-            # Apply size filter using adaptive parameters only
-            self.progress_signal.emit("Applying size filter...", 20)
-            min_width_ratio = td_config.get("min_width_ratio", 0.0)
-            min_height_ratio = td_config.get("min_height_ratio", 0.0)
-            median_height_fraction = td_config.get("median_height_fraction", 1.0)
-            
-            size_filtered = filter_text_regions(
-                all_boxes,
-                (img_height, img_width),
-                min_width_ratio=min_width_ratio,
-                min_height_ratio=min_height_ratio,
-                median_height_fraction=median_height_fraction
-            )
+
+            if self.is_cancelled:
+                return
+
+            # Apply size filter to manual boxes if needed (already done for RapidOCR)
+            # Note: For manual boxes, we might want to skip size filtering since user explicitly selected them
+            # But for selection mask regions, we should filter
+            if not state.use_rapidocr and regions:
+                # Only filter if these are from selection mask, not manual boxes
+                # Manual boxes are user's explicit choice, so don't filter them
+                if not state.manual_boxes:  # These are from selection mask
+                    min_width_ratio = td_config.get("min_width_ratio", 0.0)
+                    min_height_ratio = td_config.get("min_height_ratio", 0.0)
+                    median_height_fraction = td_config.get("median_height_fraction", 1.0)
+                    regions = filter_text_regions(
+                        regions,
+                        (img_height, img_width),
+                        min_width_ratio=min_width_ratio,
+                        min_height_ratio=min_height_ratio,
+                        median_height_fraction=median_height_fraction
+                    )
             
             if self.is_cancelled:
                 return
@@ -106,7 +201,7 @@ class OCRWorker(QThread):
             
             # Step 3: Sort by reading order (Initial sort)
             regions = sort_text_regions_by_reading_order(
-                size_filtered, 
+                regions, 
                 direction=direction,
                 group_tolerance=group_tol
             )

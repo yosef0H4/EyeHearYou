@@ -23,11 +23,19 @@ class AppState:
         self.last_extracted_text: Optional[str] = None
         self.last_extraction_version: int = 0  # Screenshot version when last extraction was done
 
+        # Selection & Manual Mode State
+        self.use_rapidocr: bool = True
+        self.selection_base_state: bool = True  # True = Select All (White), False = Deselect All (Black)
+        self.selection_ops: List[Dict] = []  # List of {"op": "add"|"sub", "rect": (x,y,w,h)} normalized 0-1
+        self.manual_boxes: List[Tuple[int, int, int, int]] = []  # Manual boxes in pixel coordinates
+
     def reset_detections(self):
         """Reset detections when new screenshot is captured"""
         self.last_detections = []
         self.unfiltered_detections = []
         self.image_scale = 1.0
+        # Clear manual boxes when new screenshot is captured (user usually wants fresh start)
+        self.manual_boxes = []
         # Clear cached detections for old screenshot versions (keep only last 5 cache entries)
         if len(self.cached_raw_detections) > 5:
             # Remove oldest entries (by version)
