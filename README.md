@@ -15,6 +15,7 @@ A Python application that reads text aloud from your screen. Press `Ctrl+Shift+A
 - **Real-Time Preview**: Native PyQt6 GUI with instant visual feedback for tuning detection settings.
 - **Resolution Independent**: Manual boxes and selection areas use normalized coordinates (0-1), so they work correctly even if you resize the game window or change resolution.
 - **Contained Box Filtering**: Automatically removes smaller boxes that are mostly inside larger manual boxes (keeps the container, discards the inner ones).
+- **Configuration Profiles**: Save different settings for different games. The Default profile is locked and protected, while custom profiles can be created, renamed, and deleted. Switch between profiles instantly with all settings auto-updating.
 - **Loading Screen**: Shows progress bar during model warm-up on startup.
 
 ## Requirements
@@ -69,6 +70,38 @@ A Python application that reads text aloud from your screen. Press `Ctrl+Shift+A
    - Switch back to the GUI to see the preview.
    - Use the **Selection Tools** to refine exactly what text is read.
 
+## Configuration Profiles
+
+The application supports multiple configuration profiles, allowing you to save different settings for different games or use cases. This is especially useful since different games may require different detection parameters, TTS voices, or preprocessing settings.
+
+### Profile Management
+
+- **Default Profile**: The factory default profile is locked and cannot be edited or deleted. It serves as a safe starting point. All settings are grayed out when Default is selected.
+- **Creating Profiles**: Click the **📋 (Duplicate)** button to create a new profile based on the current one. You'll be prompted to enter a name (e.g., "Visual Novel", "RPG", "Manga Reader").
+- **Switching Profiles**: Use the profile dropdown at the top of the settings panel to switch between profiles. All settings automatically update to reflect the selected profile.
+- **Renaming Profiles**: Click the **✏️ (Rename)** button to rename the current profile (Default cannot be renamed).
+- **Deleting Profiles**: Click the **🗑️ (Delete)** button to remove a profile (Default cannot be deleted).
+
+### Profile Storage
+
+- Profiles are stored in `profiles.json` in the application directory.
+- The Default profile is **not** stored in `profiles.json` - it's embedded in the code to prevent accidental deletion.
+- Each profile contains all configuration settings: preprocessing, text detection, text sorting, TTS settings, and manual boxes.
+- When you switch profiles, all UI controls (sliders, dropdowns, etc.) automatically update to show the profile's saved values.
+
+### Workflow Example
+
+1. **Start with Default**: The Default profile provides optimized settings that work for most games.
+2. **Create Game-Specific Profile**: 
+   - Select Default profile
+   - Click **📋** to duplicate it
+   - Name it after your game (e.g., "Final Fantasy VII")
+3. **Customize Settings**: 
+   - Adjust detection parameters for the game's text style
+   - Set TTS voice and speed preferences
+   - Configure manual boxes for fixed dialogue areas
+4. **Switch Easily**: Use the profile dropdown to quickly switch between different game configurations.
+
 ## Selection Tools Guide
 
 The GUI provides powerful tools to control exactly what text is processed.
@@ -111,7 +144,7 @@ The GUI provides powerful tools to control exactly what text is processed.
 
 ## Configuration Settings
 
-Settings are saved to `config.json`. Key parameters:
+Settings are saved per profile in `profiles.json` (or use the embedded Default profile). Key parameters:
 
 - **max_image_dimension**: Downscales huge screenshots to save memory (Default: 1080).
 - **preprocessing**: Adjusts image contrast/brightness before OCR (useful for transparent text boxes).
@@ -133,7 +166,9 @@ Settings are saved to `config.json`. Key parameters:
 - **tts**:
   - *speed*: Speech speed multiplier (0.5-2.0, default: 1.0).
   - *voice*: Kokoro voice ID (default: "af_heart").
-- **manual_boxes**: Automatically saved list of manual boxes in normalized coordinates (persists across sessions).
+- **manual_boxes**: Automatically saved list of manual boxes in normalized coordinates (persists across sessions, saved per profile).
+
+**Note**: Each profile maintains its own set of manual boxes, so you can have different selection areas for different games.
 
 ## Hotkeys
 
@@ -157,7 +192,9 @@ Test scripts are available to verify installation:
 
 - **Hotkey not working?** Run the terminal/command prompt as Administrator (Windows restriction).
 - **Slow performance?** Ensure you installed with `--gpu` and have CUDA installed. CPU mode works but takes 2-5 seconds per capture.
-- **Manual Boxes disappeared?** They are saved in `config.json` under `manual_boxes`. If you deleted the config file, they are reset.
+- **Manual Boxes disappeared?** They are saved in `profiles.json` under each profile's `manual_boxes`. If you deleted the profile or the profiles file, they are reset. The Default profile's manual boxes are not persisted (it's read-only).
+- **Settings not saving?** Make sure you're not using the Default profile (which is locked). Duplicate it to create an editable profile.
+- **Profile corrupted?** If `profiles.json` is corrupted, the application will automatically fall back to the Default profile. You can delete `profiles.json` to start fresh.
 - **Text box selected but not reading?** Check the "Preprocessing" tab. Try increasing "Contrast" or using "Binary Threshold" if the text blends into the background.
 - **Loading screen stuck?** First run downloads models (~1.6GB H2OVL + ~300MB Kokoro). Check your internet connection and disk space.
 - **Flash Attention warnings?** These are informational - the model will use SDPA fallback if Flash Attention isn't available. GPU performance may be slower without Flash Attention.
