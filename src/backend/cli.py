@@ -1,5 +1,5 @@
 """
-Standalone CLI entry point for OCR accessibility tool
+Standalone CLI entry point for EyeHearYou
 Captures screenshots on Ctrl+Shift+Alt+Z, extracts text using local H2OVL model, and reads it aloud
 Uses text detection to only process text regions, improving efficiency
 
@@ -86,7 +86,7 @@ def process_screenshot_detect():
 
 def main():
     """Main entry point"""
-    print("Screenshot OCR Application")
+    print("EyeHearYou")
     print("="*60)
     
     # Check if config exists, if not create template

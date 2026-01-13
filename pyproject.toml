@@ -1,7 +1,7 @@
 [project]
 name = "visual-novel-ocr"
 version = "0.1.0"
-description = "Accessibility OCR tool that reads text aloud - one-key text extraction with AI-powered OCR and automatic text-to-speech. Press Ctrl+Shift+Alt+Z to capture, detect, extract, and read text aloud automatically. Perfect for users who cannot read text on screen."
+description = "EyeHearYou - Accessibility OCR tool that reads text aloud - one-key text extraction with AI-powered OCR and automatic text-to-speech. Press Ctrl+Shift+Alt+Z to capture, detect, extract, and read text aloud automatically. Perfect for users who cannot read text on screen."
 requires-python = ">=3.12"
 dependencies = [
     "gitignore-parser==0.1.13",

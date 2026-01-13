@@ -1,4 +1,4 @@
-Here is a detailed, readable summary of the **OCR Accessibility Tool**.
+Here is a detailed, readable summary of **EyeHearYou**.
 
 ### 🎯 Core Purpose
 A Python application designed for accessibility that captures your screen (or specific active window), uses local AI to extract text, and automatically reads it aloud. It is optimized for Visual Novels and games but works on any screen content.

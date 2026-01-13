@@ -1,4 +1,4 @@
-"""PyQt6 GUI frontend for OCR Accessibility Tool"""
+"""PyQt6 GUI frontend for EyeHearYou"""
 import sys
 import time
 from PyQt6.QtWidgets import QApplication, QSplashScreen, QProgressBar, QLabel, QVBoxLayout, QWidget
@@ -46,7 +46,7 @@ class LoadingScreen(QWidget):
     """Loading screen widget with progress bar"""
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("OCR Accessibility Tool - Loading")
+        self.setWindowTitle("EyeHearYou - Loading")
         self.setFixedSize(450, 250)
         self.setStyleSheet("background-color: #1e1e1e;")
         # Center window on screen
@@ -58,7 +58,7 @@ class LoadingScreen(QWidget):
         layout.setContentsMargins(30, 40, 30, 30)
         
         # Title
-        self.title_label = QLabel("OCR Accessibility Tool")
+        self.title_label = QLabel("EyeHearYou")
         font = QFont("Segoe UI", 18, QFont.Weight.Bold)
         self.title_label.setFont(font)
         self.title_label.setStyleSheet("color: white;")

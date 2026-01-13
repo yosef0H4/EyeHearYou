@@ -38,7 +38,7 @@ class OCRWindow(QMainWindow):
     # Dictionary for UI translations
     TRANSLATIONS = {
         "en": {
-            "window_title": "OCR Accessibility Tool - Settings Tuner",
+            "window_title": "EyeHearYou - Settings Tuner",
             "model_info": "Model: H2OVL-Mississippi-0.8B (Local)",
             "profile_group": "Configuration Profile",
             "ui_lang_label": "UI Language:",
@@ -112,7 +112,7 @@ class OCRWindow(QMainWindow):
             "phonemes_placeholder": "Phonemes will appear here after text is read..."
         },
         "ar": {
-            "window_title": "أداة الوصول OCR - موجه الإعدادات",
+            "window_title": "EyeHearYou - موجه الإعدادات",
             "model_info": "النموذج: H2OVL-Mississippi-0.8B (محلي)",
             "profile_group": "ملف التعريف",
             "ui_lang_label": "لغة الواجهة:",

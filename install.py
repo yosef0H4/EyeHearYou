@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Installation script for OCR Accessibility Tool
+Installation script for EyeHearYou
 Replaces install-gpu.bat and install-cpu.bat with a cross-platform Python script
 
 Usage:
@@ -411,7 +411,7 @@ else:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Install dependencies for OCR Accessibility Tool",
+        description="Install dependencies for EyeHearYou",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
@@ -434,7 +434,7 @@ Examples:
     args = parser.parse_args()
     
     print("="*60)
-    print("OCR Accessibility Tool - Installation Script")
+    print("EyeHearYou - Installation Script")
     print("="*60)
     print()
     
