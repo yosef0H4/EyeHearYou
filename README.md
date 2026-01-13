@@ -16,7 +16,7 @@ A Python application designed for accessibility that captures your screen (or sp
 
 ### ⚠️ Hardware Requirements
 *   **Recommended:** NVIDIA GPU with CUDA (minimum 6GB VRAM). Performance is fast (1-3 seconds).
-*   **Not Recommended:** CPU-only mode. It is untested and will be very slow (10-30+ seconds per capture).
+*   **Not Recommended:** CPU-only mode. It is untested and will be very slow.
 
 ### 🚀 Installation & Usage
 1.  **Install:** Requires Python 3.12+ and `uv`.
