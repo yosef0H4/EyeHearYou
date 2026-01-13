@@ -27,10 +27,10 @@ config.json
 uv.lock
 tmp/
 
-# Compiled TypeScript
 src/frontend/dist/
 *.js.map
 package-lock.json
 node_modules/
 bundled_code.json
 comic-translate/
+profiles.json
