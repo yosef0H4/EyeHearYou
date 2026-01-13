@@ -5,6 +5,7 @@ A Python application that reads text aloud from your screen. Press `Ctrl+Shift+A
 ## Features
 
 - **One-Key Reading**: Press `Ctrl+Shift+Alt+Z` to automatically capture, detect, extract, and read text aloud.
+- **Multi-Language UI**: Full UI translation support with English and Arabic. Language setting is stored separately from profiles and persists across sessions. Arabic interface includes proper RTL (Right-to-Left) layout support.
 - **Smart & Manual Selection**:
   - **Smart Detection**: Uses RapidOCR to automatically find text on screen (toggleable).
   - **Manual Boxes**: Draw permanent boxes over fixed areas (like dialogue boxes in Visual Novels). These persist across screenshots, adapt to window resizing, and are saved to config.
@@ -22,7 +23,15 @@ A Python application that reads text aloud from your screen. Press `Ctrl+Shift+A
 
 - Python 3.12+
 - `uv` package manager (recommended) or standard pip.
-- **Hardware**: NVIDIA GPU (6GB+ VRAM) recommended for speed, but runs on CPU (slower).
+- **Hardware**: 
+  - **⚠️ NVIDIA GPU with CUDA (REQUIRED for acceptable performance)**
+    - Minimum: 6GB+ VRAM recommended
+    - CUDA 12.9 compatible GPU
+  - **⚠️ CPU Mode (NOT RECOMMENDED)**
+    - CPU implementation is **UNTESTED** and **VERY SLOW**
+    - Transformer models (H2OVL-Mississippi, Kokoro TTS) are computationally heavy
+    - Expect 10-30+ seconds per capture on CPU
+    - GPU is **STRONGLY RECOMMENDED** for acceptable performance
 
 ## Installation
 
@@ -45,12 +54,17 @@ A Python application that reads text aloud from your screen. Press `Ctrl+Shift+A
 
    **What gets installed:**
    - Base dependencies from `pyproject.toml` (including opencv-python for RapidOCR)
-   - PyTorch 2.8.0 (GPU with CUDA 12.9, or CPU version)
+   - PyTorch 2.8.0 (GPU with CUDA 12.9, or CPU version - **NOT RECOMMENDED**)
    - Flash Attention 2.8.2 (GPU only, Windows prebuilt wheel via Hugging Face Hub)
    - H2OVL-Mississippi dependencies (transformers, accelerate, timm, peft)
    - Kokoro TTS dependencies (kokoro, misaki[en], loguru, soundfile, sounddevice)
    - Spacy model (en-core-web-sm) for Kokoro TTS
    - RapidOCR (CPU via ONNX Runtime, for text detection)
+   
+   **⚠️ CPU Installation Warning:**
+   - The installer will warn you if no CUDA is detected
+   - CPU mode is untested and will be very slow (10-30+ seconds per capture)
+   - GPU with CUDA is **STRONGLY RECOMMENDED** for acceptable performance
 
 ## Quick Start
 
@@ -142,6 +156,17 @@ The GUI provides powerful tools to control exactly what text is processed.
 3. If RapidOCR misses the dialogue, the manual box will catch it.
 4. The contained box filter automatically removes RapidOCR detections that are inside your manual box (keeps the larger manual box).
 
+## UI Language Selection
+
+The application supports multiple UI languages. The language setting is stored globally in `app_settings.json` (independent of profiles), so your language preference persists across all profiles.
+
+- **Available Languages**: English, Arabic (العربية)
+- **How to Change**: Use the language dropdown in the Configuration Profile section (indicated by the 🌐 globe icon)
+- **RTL Support**: Arabic interface automatically switches to Right-to-Left layout
+- **Storage**: Language preference is saved in `app_settings.json` (separate from profile settings)
+
+**Note**: UI language only affects the interface text. OCR and TTS processing remain in English.
+
 ## Configuration Settings
 
 Settings are saved per profile in `profiles.json` (or use the embedded Default profile). Key parameters:
@@ -191,7 +216,9 @@ Test scripts are available to verify installation:
 ## Troubleshooting
 
 - **Hotkey not working?** Run the terminal/command prompt as Administrator (Windows restriction).
-- **Slow performance?** Ensure you installed with `--gpu` and have CUDA installed. CPU mode works but takes 2-5 seconds per capture.
+- **Slow performance?** 
+  - **GPU**: Ensure you installed with `--gpu` and have CUDA installed. GPU mode should take 1-3 seconds per capture.
+  - **CPU**: ⚠️ CPU mode is **UNTESTED** and **VERY SLOW** (10-30+ seconds per capture). This project is designed for NVIDIA GPU with CUDA. CPU implementation may not work correctly and is not recommended.
 - **Manual Boxes disappeared?** They are saved in `profiles.json` under each profile's `manual_boxes`. If you deleted the profile or the profiles file, they are reset. The Default profile's manual boxes are not persisted (it's read-only).
 - **Settings not saving?** Make sure you're not using the Default profile (which is locked). Duplicate it to create an editable profile.
 - **Profile corrupted?** If `profiles.json` is corrupted, the application will automatically fall back to the Default profile. You can delete `profiles.json` to start fresh.
@@ -212,6 +239,7 @@ Test scripts are available to verify installation:
 
 ## Notes
 
+- **⚠️ GPU Requirement**: This project is **designed for NVIDIA GPU with CUDA**. CPU implementation is untested, very slow (10-30+ seconds per capture), and not recommended. GPU is required for acceptable performance.
 - **Windows**: The `keyboard` library requires administrator privileges for global hotkeys.
 - **Screenshot**: Captures only the active window (not the full screen).
 - **Local Processing**: All OCR processing happens locally - no internet connection or API keys required (except for initial model downloads).

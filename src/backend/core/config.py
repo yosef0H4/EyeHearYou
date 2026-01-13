@@ -6,6 +6,7 @@ from pathlib import Path
 # Configuration file paths
 CONFIG_FILE = Path("config.json")
 PROFILES_FILE = Path("profiles.json")
+APP_CONFIG_FILE = Path("app_settings.json")
 
 # Factory Default Profile (embedded in code, never written to disk)
 FACTORY_DEFAULT = {
@@ -162,6 +163,26 @@ def _validate_and_migrate_config(config):
         config["manual_boxes"] = FACTORY_DEFAULT["manual_boxes"].copy()
     
     return config
+
+
+def load_app_settings():
+    """Load global app settings (language, etc) independent of profiles"""
+    if not APP_CONFIG_FILE.exists():
+        return {"ui_lang": "en"}
+    try:
+        with open(APP_CONFIG_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except:
+        return {"ui_lang": "en"}
+
+
+def save_app_settings(settings):
+    """Save global app settings"""
+    try:
+        with open(APP_CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump(settings, f, indent=4)
+    except Exception as e:
+        print(f"Error saving app_settings.json: {e}")
 
 
 

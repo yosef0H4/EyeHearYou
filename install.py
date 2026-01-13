@@ -217,12 +217,18 @@ def install_flash_attention():
 
 
 def install_h2ovl_deps():
-    """Install H2OVL-Mississippi dependencies"""
+    """Install H2OVL-Mississippi dependencies with exact versions"""
     print("\n" + "="*60)
-    print("[3/5] Installing H2OVL-Mississippi dependencies...")
+    print("[3/5] Installing H2OVL-Mississippi dependencies (exact versions)...")
     print("="*60)
     
-    cmd = ["uv", "pip", "install", "transformers", "accelerate", "timm", "peft"]
+    cmd = [
+        "uv", "pip", "install",
+        "transformers==4.57.3",
+        "accelerate==1.12.0",
+        "timm==1.0.24",
+        "peft==0.18.1"
+    ]
     return run_command(cmd)
 
 
@@ -234,15 +240,15 @@ def install_kokoro_tts():
     print("NOTE: Installing kokoro, misaki[en], loguru, soundfile, and sounddevice")
     print("      These require torch, so they must be installed after PyTorch.")
     
-    # Install kokoro and its dependencies
+    # Install kokoro and its dependencies with exact versions
     # misaki[en] includes spacy, spacy-curated-transformers, espeakng-loader, num2words, phonemizer-fork
     cmd = [
         "uv", "pip", "install",
-        "kokoro>=0.9.2",
-        "misaki[en]>=0.9.4",
-        "loguru>=0.7.0",
-        "soundfile>=0.12.1",
-        "sounddevice>=0.4.6"
+        "kokoro==0.9.4",
+        "misaki[en]==0.9.4",
+        "loguru==0.7.3",
+        "soundfile==0.13.1",
+        "sounddevice==0.5.3"
     ]
     if not run_command(cmd):
         return False
@@ -382,7 +388,20 @@ Examples:
     
     if args.cpu:
         use_gpu = False
-        print("Installing CPU-only version...")
+        print("\n" + "="*60)
+        print("⚠️  WARNING: CPU-only installation requested")
+        print("="*60)
+        print("⚠️  IMPORTANT: This project is designed for NVIDIA GPU with CUDA.")
+        print("⚠️  CPU implementation is UNTESTED and will be VERY SLOW.")
+        print("⚠️  Transformer models (H2OVL-Mississippi, Kokoro TTS) are heavy")
+        print("⚠️  and may take 10-30+ seconds per capture on CPU.")
+        print("⚠️  GPU is STRONGLY RECOMMENDED for acceptable performance.")
+        print("="*60)
+        response = input("\nContinue with CPU installation? (y/N): ").strip().lower()
+        if response != 'y':
+            print("Installation cancelled. Please install CUDA and an NVIDIA GPU.")
+            sys.exit(0)
+        print("\nProceeding with CPU-only installation (not recommended)...")
     elif args.gpu:
         use_gpu = True
         print("Installing GPU version with CUDA support...")
@@ -392,7 +411,20 @@ Examples:
         if use_gpu:
             print("CUDA detected. Installing GPU version...")
         else:
-            print("No CUDA detected. Installing CPU version...")
+            print("\n" + "="*60)
+            print("⚠️  WARNING: No CUDA detected. Installing CPU version...")
+            print("="*60)
+            print("⚠️  IMPORTANT: This project is designed for NVIDIA GPU with CUDA.")
+            print("⚠️  CPU implementation is UNTESTED and will be VERY SLOW.")
+            print("⚠️  Transformer models (H2OVL-Mississippi, Kokoro TTS) are heavy")
+            print("⚠️  and may take 10-30+ seconds per capture on CPU.")
+            print("⚠️  GPU is STRONGLY RECOMMENDED for acceptable performance.")
+            print("="*60)
+            response = input("\nContinue with CPU installation? (y/N): ").strip().lower()
+            if response != 'y':
+                print("Installation cancelled. Please install CUDA and an NVIDIA GPU.")
+                sys.exit(0)
+            print("\nProceeding with CPU installation (not recommended)...")
             print("(Use --gpu to force GPU installation anyway)")
     
     print()
@@ -439,8 +471,8 @@ Examples:
     print("[Final] Ensuring opencv-python is installed (required for RapidOCR)...")
     print("="*60)
     print("NOTE: opencv-python may have been removed during dependency resolution.")
-    print("      Reinstalling to ensure RapidOCR works correctly.")
-    run_command(["uv", "pip", "install", "opencv-python>=4.8.0"], check=False)
+    print("      Reinstalling exact version to ensure RapidOCR works correctly.")
+    run_command(["uv", "pip", "install", "opencv-python==4.11.0.86"], check=False)
     print()
     
     # Verify installation

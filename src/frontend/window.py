@@ -13,7 +13,10 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QTimer, QRect, QEvent, QPointF, QRectF
 from PyQt6.QtGui import QPixmap, QImage, QPen, QColor, QBrush, QPainter, QFont, QPainterPath
 
-from src.backend.core.config import load_config, CONFIG_FILE, load_profiles, save_profiles
+from src.backend.core.config import (
+    load_config, CONFIG_FILE, load_profiles, save_profiles,
+    load_app_settings, save_app_settings
+)
 from src.backend.core.capture import capture_screenshot
 from src.backend.state import state
 from src.backend.core.filtering import (
@@ -29,6 +32,144 @@ from src.frontend.constants import KEYBOARD_AVAILABLE, keyboard
 
 
 class OCRWindow(QMainWindow):
+    # Dictionary for UI translations
+    TRANSLATIONS = {
+        "en": {
+            "window_title": "OCR Accessibility Tool - Settings Tuner",
+            "model_info": "Model: H2OVL-Mississippi-0.8B (Local)",
+            "profile_group": "Configuration Profile",
+            "ui_lang_label": "UI Language:",
+            "selection_group": "Selection Tools",
+            "img_adj_group": "Image Adjustments",
+            "text_proc_group": "Text Detection & Merging",
+            "tts_group": "🔊 Text-to-Speech (Kokoro)",
+            "status_group": "Status",
+            "output_group": "Extracted Text",
+            "preview_label": "Image Preview",
+            "btn_capture": "📸 Capture Screenshot",
+            "btn_extract": "🚀 Extract Text",
+            "btn_cancel": "⛔ Cancel",
+            "status_ready": "Ready",
+            "lock_notice": "⚠️ Default profile is locked. Duplicate to edit.",
+            "chk_rapid": "Use Smart Detection (RapidOCR)",
+            "chk_rapid_tooltip": "Uncheck to manually select text areas",
+            "btn_tool_none": "✋ View",
+            "btn_tool_add": "➕ Add Area",
+            "btn_tool_sub": "➖ Remove Area",
+            "btn_tool_manual": "📦 Manual Box",
+            "btn_sel_all": "Select All",
+            "btn_desel_all": "Deselect All",
+            "btn_clear_manual": "Clear Manual",
+            "btn_new_profile_tooltip": "Duplicate current profile",
+            "btn_rename_profile_tooltip": "Rename current profile",
+            "btn_delete_profile_tooltip": "Delete current profile",
+            "label_max_dimension": "Max Dimension:",
+            "label_colors": "Colors:",
+            "colors_normal": "Normal Colors",
+            "colors_invert": "Invert Colors",
+            "reset_tooltip": "Reset to default",
+            "legend_text": "🟥 Red: Min Size Filter\n🟨 Yellow: Merge Zone\n🟦 Blue: Reference Box",
+            "detection_header": "1. Detection Filter (Adaptive)",
+            "detection_info": "Uses ratios relative to text size - works across all screen sizes!",
+            "label_min_height_ratio": "Min Height Ratio:",
+            "label_noise_filter": "Noise Filter:",
+            "merging_header": "2. Merging & Reading Order",
+            "label_order": "Order:",
+            "order_ltr": "Left to Right (Standard)",
+            "order_rtl": "Right to Left (Manga)",
+            "order_vertical_rtl": "Vertical Columns (RTL)",
+            "order_vertical_ltr": "Vertical Columns (LTR)",
+            "label_v_ratio": "V. Ratio:",
+            "label_h_ratio": "H. Ratio:",
+            "label_width_ratio": "Width Ratio:",
+            "tooltip_v_ratio": "Vertical gap as multiplier of text height (e.g., 0.07 = tight vertical merging)",
+            "tooltip_h_ratio": "Horizontal gap as multiplier of text height (e.g., 0.37 = tight horizontal merging)",
+            "tooltip_width_ratio": "Minimum horizontal overlap ratio for vertical merging",
+            "label_line_grouping": "Line Grouping:",
+            "tts_info": "TTS is always enabled - text will be read aloud automatically",
+            "label_language": "Language:",
+            "label_gender": "Gender:",
+            "label_voice": "Voice:",
+            "label_speed": "Speed:",
+            "label_volume": "Volume:",
+            "btn_play": "▶ Play",
+            "btn_play_tooltip": "Re-generate and play TTS with current voice/speed settings",
+            "btn_replay": "🔁 Replay",
+            "btn_replay_tooltip": "Replay the last generated audio (same voice/speed)",
+            "btn_stop": "⏹ Stop",
+            "btn_stop_tooltip": "Stop current audio playback",
+            "label_phonemes": "Phonemes (IPA):",
+            "phonemes_placeholder": "Phonemes will appear here after text is read..."
+        },
+        "ar": {
+            "window_title": "أداة الوصول OCR - موجه الإعدادات",
+            "model_info": "النموذج: H2OVL-Mississippi-0.8B (محلي)",
+            "profile_group": "ملف التعريف",
+            "ui_lang_label": "لغة الواجهة:",
+            "selection_group": "أدوات التحديد",
+            "img_adj_group": "تعديلات الصورة",
+            "text_proc_group": "كشف النص ودمجه",
+            "tts_group": "🔊 تحويل النص إلى كلام (Kokoro)",
+            "status_group": "الحالة",
+            "output_group": "النص المستخرج",
+            "preview_label": "معاينة الصورة",
+            "btn_capture": "📸 التقاط الشاشة",
+            "btn_extract": "🚀 استخراج النص",
+            "btn_cancel": "⛔ إلغاء",
+            "status_ready": "جاهز",
+            "lock_notice": "⚠️ ملف التعريف الافتراضي مقفل. انسخه للتعديل.",
+            "chk_rapid": "استخدام الكشف الذكي (RapidOCR)",
+            "chk_rapid_tooltip": "قم بإلغاء التحديد لتحديد مناطق النص يدوياً",
+            "btn_tool_none": "✋ عرض",
+            "btn_tool_add": "➕ إضافة منطقة",
+            "btn_tool_sub": "➖ إزالة منطقة",
+            "btn_tool_manual": "📦 صندوق يدوي",
+            "btn_sel_all": "تحديد الكل",
+            "btn_desel_all": "إلغاء تحديد الكل",
+            "btn_clear_manual": "مسح اليدوي",
+            "btn_new_profile_tooltip": "نسخ ملف التعريف الحالي",
+            "btn_rename_profile_tooltip": "إعادة تسمية ملف التعريف الحالي",
+            "btn_delete_profile_tooltip": "حذف ملف التعريف الحالي",
+            "label_max_dimension": "الحد الأقصى للأبعاد:",
+            "label_colors": "الألوان:",
+            "colors_normal": "ألوان عادية",
+            "colors_invert": "عكس الألوان",
+            "reset_tooltip": "إعادة تعيين إلى الافتراضي",
+            "legend_text": "🟥 أحمر: مرشح الحد الأدنى للحجم\n🟨 أصفر: منطقة الدمج\n🟦 أزرق: صندوق مرجعي",
+            "detection_header": "1. مرشح الكشف (متكيف)",
+            "detection_info": "يستخدم نسباً نسبة لحجم النص - يعمل عبر جميع أحجام الشاشة!",
+            "label_min_height_ratio": "نسبة الحد الأدنى للارتفاع:",
+            "label_noise_filter": "مرشح الضوضاء:",
+            "merging_header": "2. الدمج وترتيب القراءة",
+            "label_order": "الترتيب:",
+            "order_ltr": "من اليسار إلى اليمين (قياسي)",
+            "order_rtl": "من اليمين إلى اليسار (مانجا)",
+            "order_vertical_rtl": "أعمدة عمودية (من اليمين إلى اليسار)",
+            "order_vertical_ltr": "أعمدة عمودية (من اليسار إلى اليمين)",
+            "label_v_ratio": "نسبة عمودية:",
+            "label_h_ratio": "نسبة أفقية:",
+            "label_width_ratio": "نسبة العرض:",
+            "tooltip_v_ratio": "الفجوة العمودية كمضاعف لارتفاع النص (مثلاً، 0.07 = دمج عمودي ضيق)",
+            "tooltip_h_ratio": "الفجوة الأفقية كمضاعف لارتفاع النص (مثلاً، 0.37 = دمج أفقي ضيق)",
+            "tooltip_width_ratio": "نسبة التداخل الأفقي الأدنى للدمج العمودي",
+            "label_line_grouping": "تجميع الأسطر:",
+            "tts_info": "تحويل النص إلى كلام مفعّل دائماً - سيتم قراءة النص تلقائياً",
+            "label_language": "اللغة:",
+            "label_gender": "الجنس:",
+            "label_voice": "الصوت:",
+            "label_speed": "السرعة:",
+            "label_volume": "مستوى الصوت:",
+            "btn_play": "▶ تشغيل",
+            "btn_play_tooltip": "إعادة توليد وتشغيل تحويل النص إلى كلام بالإعدادات الحالية للصوت/السرعة",
+            "btn_replay": "🔁 إعادة التشغيل",
+            "btn_replay_tooltip": "إعادة تشغيل الصوت المولّد آخر مرة (نفس الصوت/السرعة)",
+            "btn_stop": "⏹ إيقاف",
+            "btn_stop_tooltip": "إيقاف تشغيل الصوت الحالي",
+            "label_phonemes": "الفونيمات (IPA):",
+            "phonemes_placeholder": "ستظهر الفونيمات هنا بعد قراءة النص..."
+        }
+    }
+
     # Default values for reset functionality
     DEFAULT_CONFIG = {
         "max_image_dimension": 1080,
@@ -57,7 +198,16 @@ class OCRWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("OCR Accessibility Tool - Settings Tuner")
+        app_settings = load_app_settings()
+        self.ui_lang = app_settings.get("ui_lang", "en")
+        
+        # Set layout direction based on language
+        if self.ui_lang == "ar":
+            self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+        else:
+            self.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
+        
+        self.setWindowTitle(self.TRANSLATIONS[self.ui_lang]["window_title"])
         self.resize(1400, 950)
         self.config = load_config()
         self.worker: Optional[OCRWorker] = None
@@ -115,15 +265,15 @@ class OCRWindow(QMainWindow):
         controls_layout.setContentsMargins(10, 10, 10, 10)
 
         # 1. Model Info Label
-        model_info = QLabel("Model: H2OVL-Mississippi-0.8B (Local)")
-        model_info.setStyleSheet("font-weight: bold; color: #4CAF50; padding: 5px;")
-        controls_layout.addWidget(model_info)
+        self.model_info = QLabel(self.TRANSLATIONS[self.ui_lang]["model_info"])
+        self.model_info.setStyleSheet("font-weight: bold; color: #4CAF50; padding: 5px;")
+        controls_layout.addWidget(self.model_info)
 
         # Profile Management Group
         self.create_profile_group(controls_layout)
 
         # Locked Notice (Hidden by default)
-        self.lock_notice = QLabel("⚠️ Default profile is locked. Duplicate to edit.")
+        self.lock_notice = QLabel(self.TRANSLATIONS[self.ui_lang]["lock_notice"])
         self.lock_notice.setStyleSheet("color: #ffb74d; font-weight: bold; padding: 5px; background: #332b00; border-radius: 4px;")
         self.lock_notice.setVisible(False)
         controls_layout.addWidget(self.lock_notice)
@@ -145,12 +295,12 @@ class OCRWindow(QMainWindow):
 
         # Buttons
         btn_layout = QVBoxLayout()
-        self.btn_capture = QPushButton("📸 Capture Screenshot")
+        self.btn_capture = QPushButton(self.TRANSLATIONS[self.ui_lang]["btn_capture"])
         self.btn_capture.clicked.connect(self.run_capture_and_detect)
-        self.btn_cancel = QPushButton("⛔ Cancel")
+        self.btn_cancel = QPushButton(self.TRANSLATIONS[self.ui_lang]["btn_cancel"])
         self.btn_cancel.clicked.connect(self.cancel_process)
         self.btn_cancel.setEnabled(False)
-        self.btn_extract = QPushButton("🚀 Extract Text")
+        self.btn_extract = QPushButton(self.TRANSLATIONS[self.ui_lang]["btn_extract"])
         self.btn_extract.clicked.connect(self.run_extraction)
 
         btn_layout.addWidget(self.btn_capture)
@@ -159,27 +309,27 @@ class OCRWindow(QMainWindow):
         controls_layout.addLayout(btn_layout)
 
         # Status and Progress
-        status_group = QGroupBox("Status")
+        self.status_group = QGroupBox(self.TRANSLATIONS[self.ui_lang]["status_group"])
         status_layout = QVBoxLayout()
-        self.status_label = QLabel("Ready")
+        self.status_label = QLabel(self.TRANSLATIONS[self.ui_lang]["status_ready"])
         self.status_label.setWordWrap(True)
         self.progress_bar = QProgressBar()
         self.progress_bar.setMinimum(0)
         self.progress_bar.setMaximum(100)
         status_layout.addWidget(self.status_label)
         status_layout.addWidget(self.progress_bar)
-        status_group.setLayout(status_layout)
-        controls_layout.addWidget(status_group)
+        self.status_group.setLayout(status_layout)
+        controls_layout.addWidget(self.status_group)
 
         # Output Text
-        output_group = QGroupBox("Extracted Text")
+        self.output_group = QGroupBox(self.TRANSLATIONS[self.ui_lang]["output_group"])
         output_layout = QVBoxLayout()
         self.text_output = QTextEdit()
         self.text_output.setReadOnly(True)
         self.text_output.setMinimumHeight(150)
         output_layout.addWidget(self.text_output)
-        output_group.setLayout(output_layout)
-        controls_layout.addWidget(output_group)
+        self.output_group.setLayout(output_layout)
+        controls_layout.addWidget(self.output_group)
 
         controls_layout.addStretch()
         
@@ -191,9 +341,9 @@ class OCRWindow(QMainWindow):
         preview_layout = QVBoxLayout(preview_widget)
         preview_layout.setContentsMargins(0, 0, 0, 0)
 
-        preview_label = QLabel("Image Preview")
-        preview_label.setStyleSheet("font-weight: bold; font-size: 14px;")
-        preview_layout.addWidget(preview_label)
+        self.preview_label = QLabel(self.TRANSLATIONS[self.ui_lang]["preview_label"])
+        self.preview_label.setStyleSheet("font-weight: bold; font-size: 14px;")
+        preview_layout.addWidget(self.preview_label)
 
         self.scene = QGraphicsScene()
         self.view = QGraphicsView(self.scene)
@@ -214,8 +364,29 @@ class OCRWindow(QMainWindow):
 
     def create_profile_group(self, layout):
         """Create Configuration Profile Management Group"""
-        self.profile_group = QGroupBox("Configuration Profile")
+        self.profile_group = QGroupBox(self.TRANSLATIONS[self.ui_lang]["profile_group"])
         p_layout = QVBoxLayout()
+        
+        # Language Selector Row (Global setting)
+        lang_row = QHBoxLayout()
+        self.lang_globe_btn = QPushButton("🌐")
+        self.lang_globe_btn.setToolTip(self.TRANSLATIONS[self.ui_lang]["ui_lang_label"])
+        self.lang_globe_btn.setFixedWidth(35)
+        self.lang_globe_btn.setEnabled(False)  # Visual indicator only
+        self.lang_globe_btn.setStyleSheet("font-size: 16px;")
+        lang_row.addWidget(self.lang_globe_btn)
+        self.lang_label = QLabel(self.TRANSLATIONS[self.ui_lang]["ui_lang_label"])
+        lang_row.addWidget(self.lang_label)
+        self.lang_combo = QComboBox()
+        self.lang_combo.addItem("English", "en")
+        self.lang_combo.addItem("العربية", "ar")
+        idx = self.lang_combo.findData(self.ui_lang)
+        self.lang_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        self.lang_combo.currentIndexChanged.connect(self.change_ui_language)
+        lang_row.addWidget(self.lang_combo, 1)
+        p_layout.addLayout(lang_row)
+
+        p_layout.addWidget(self.create_separator())
         
         # Profile selector row
         selector_row = QHBoxLayout()
@@ -225,17 +396,17 @@ class OCRWindow(QMainWindow):
 
         # Action buttons
         self.btn_new_profile = QPushButton("📋")
-        self.btn_new_profile.setToolTip("Duplicate current profile")
+        self.btn_new_profile.setToolTip(self.TRANSLATIONS[self.ui_lang]["btn_new_profile_tooltip"])
         self.btn_new_profile.setFixedWidth(35)
         self.btn_new_profile.clicked.connect(self.duplicate_profile)
         
         self.btn_rename_profile = QPushButton("✏️")
-        self.btn_rename_profile.setToolTip("Rename current profile")
+        self.btn_rename_profile.setToolTip(self.TRANSLATIONS[self.ui_lang]["btn_rename_profile_tooltip"])
         self.btn_rename_profile.setFixedWidth(35)
         self.btn_rename_profile.clicked.connect(self.rename_profile)
 
         self.btn_delete_profile = QPushButton("🗑️")
-        self.btn_delete_profile.setToolTip("Delete current profile")
+        self.btn_delete_profile.setToolTip(self.TRANSLATIONS[self.ui_lang]["btn_delete_profile_tooltip"])
         self.btn_delete_profile.setFixedWidth(35)
         self.btn_delete_profile.clicked.connect(self.delete_profile)
         
@@ -426,33 +597,33 @@ class OCRWindow(QMainWindow):
 
     def create_selection_group(self, layout):
         """Create Selection Tools Group"""
-        self.selection_group = QGroupBox("Selection Tools")
+        self.selection_group = QGroupBox(self.TRANSLATIONS[self.ui_lang]["selection_group"])
         g_layout = QVBoxLayout()
         
         # 1. RapidOCR Toggle
-        self.chk_rapid = QCheckBox("Use Smart Detection (RapidOCR)")
+        self.chk_rapid = QCheckBox(self.TRANSLATIONS[self.ui_lang]["chk_rapid"])
         self.chk_rapid.setChecked(state.use_rapidocr)
-        self.chk_rapid.setToolTip("Uncheck to manually select text areas")
+        self.chk_rapid.setToolTip(self.TRANSLATIONS[self.ui_lang]["chk_rapid_tooltip"])
         self.chk_rapid.toggled.connect(self.on_rapid_toggled)
         g_layout.addWidget(self.chk_rapid)
         
         # 2. Tools Toolbar
         tools_layout = QHBoxLayout()
         
-        self.btn_tool_none = QPushButton("✋ View")
+        self.btn_tool_none = QPushButton(self.TRANSLATIONS[self.ui_lang]["btn_tool_none"])
         self.btn_tool_none.setCheckable(True)
         self.btn_tool_none.setChecked(True)
         self.btn_tool_none.clicked.connect(lambda: self.set_tool("none"))
         
-        self.btn_tool_add = QPushButton("➕ Add Area")
+        self.btn_tool_add = QPushButton(self.TRANSLATIONS[self.ui_lang]["btn_tool_add"])
         self.btn_tool_add.setCheckable(True)
         self.btn_tool_add.clicked.connect(lambda: self.set_tool("add"))
         
-        self.btn_tool_sub = QPushButton("➖ Remove Area")
+        self.btn_tool_sub = QPushButton(self.TRANSLATIONS[self.ui_lang]["btn_tool_sub"])
         self.btn_tool_sub.setCheckable(True)
         self.btn_tool_sub.clicked.connect(lambda: self.set_tool("sub"))
         
-        self.btn_tool_manual = QPushButton("📦 Manual Box")
+        self.btn_tool_manual = QPushButton(self.TRANSLATIONS[self.ui_lang]["btn_tool_manual"])
         self.btn_tool_manual.setCheckable(True)
         self.btn_tool_manual.clicked.connect(lambda: self.set_tool("manual"))
         
@@ -472,19 +643,19 @@ class OCRWindow(QMainWindow):
         # 3. Actions
         actions_layout = QHBoxLayout()
         
-        btn_sel_all = QPushButton("Select All")
-        btn_sel_all.clicked.connect(self.select_all)
+        self.btn_sel_all = QPushButton(self.TRANSLATIONS[self.ui_lang]["btn_sel_all"])
+        self.btn_sel_all.clicked.connect(self.select_all)
         
-        btn_desel_all = QPushButton("Deselect All")
-        btn_desel_all.clicked.connect(self.deselect_all)
+        self.btn_desel_all = QPushButton(self.TRANSLATIONS[self.ui_lang]["btn_desel_all"])
+        self.btn_desel_all.clicked.connect(self.deselect_all)
         
-        btn_clear_manual = QPushButton("Clear Manual")
-        btn_clear_manual.clicked.connect(self.clear_manual_boxes)
-        btn_clear_manual.setStyleSheet("color: #ff9999;")  # Reddish text hint
+        self.btn_clear_manual = QPushButton(self.TRANSLATIONS[self.ui_lang]["btn_clear_manual"])
+        self.btn_clear_manual.clicked.connect(self.clear_manual_boxes)
+        self.btn_clear_manual.setStyleSheet("color: #ff9999;")  # Reddish text hint
         
-        actions_layout.addWidget(btn_sel_all)
-        actions_layout.addWidget(btn_desel_all)
-        actions_layout.addWidget(btn_clear_manual)
+        actions_layout.addWidget(self.btn_sel_all)
+        actions_layout.addWidget(self.btn_desel_all)
+        actions_layout.addWidget(self.btn_clear_manual)
         g_layout.addLayout(actions_layout)
         
         self.selection_group.setLayout(g_layout)
@@ -564,7 +735,7 @@ class OCRWindow(QMainWindow):
 
     def create_image_settings_group(self, layout):
         """Combined Image Settings (Size + Preprocessing)"""
-        self.image_settings_group = QGroupBox("Image Adjustments")
+        self.image_settings_group = QGroupBox(self.TRANSLATIONS[self.ui_lang]["img_adj_group"])
         g_layout = QVBoxLayout()
         pp_config = self.config.get("preprocessing", {})
 
@@ -586,7 +757,8 @@ class OCRWindow(QMainWindow):
         current_dim = self.config.get("max_image_dimension", 1080)
         dim_row = QHBoxLayout()
         dim_row.setSpacing(8)
-        dim_row.addWidget(QLabel("Max Dimension:"))
+        self.label_max_dimension = QLabel(self.TRANSLATIONS[self.ui_lang]["label_max_dimension"])
+        dim_row.addWidget(self.label_max_dimension)
         
         dim_slider = QSlider(Qt.Orientation.Horizontal)
         dim_slider.setRange(320, 2560)
@@ -701,18 +873,19 @@ class OCRWindow(QMainWindow):
             g_layout.addLayout(row)
 
         # 1. Invert
-        chk_invert = QComboBox()
-        chk_invert.addItem("Normal Colors", False)
-        chk_invert.addItem("Invert Colors", True)
-        chk_invert.setCurrentIndex(1 if pp_config.get("invert", False) else 0)
-        chk_invert.currentIndexChanged.connect(lambda: self.update_pp("invert", bool(chk_invert.currentData())))
+        self.chk_invert = QComboBox()
+        self.chk_invert.addItem(self.TRANSLATIONS[self.ui_lang]["colors_normal"], False)
+        self.chk_invert.addItem(self.TRANSLATIONS[self.ui_lang]["colors_invert"], True)
+        self.chk_invert.setCurrentIndex(1 if pp_config.get("invert", False) else 0)
+        self.chk_invert.currentIndexChanged.connect(lambda: self.update_pp("invert", bool(self.chk_invert.currentData())))
         
         # Store reference for profile refresh
-        self._config_widgets["preprocessing.invert"] = (None, None, chk_invert)
+        self._config_widgets["preprocessing.invert"] = (None, None, self.chk_invert)
         inv_layout = QHBoxLayout()
         inv_layout.setSpacing(8)
-        inv_layout.addWidget(QLabel("Colors:"))
-        inv_layout.addWidget(chk_invert)
+        self.label_colors = QLabel(self.TRANSLATIONS[self.ui_lang]["label_colors"])
+        inv_layout.addWidget(self.label_colors)
+        inv_layout.addWidget(self.chk_invert)
         
         # Reset button for Colors
         def reset_invert():
@@ -760,7 +933,7 @@ class OCRWindow(QMainWindow):
         btn = QPushButton("🔄")
         btn.setMaximumWidth(30)
         btn.setMaximumHeight(30)
-        btn.setToolTip("Reset to default")
+        btn.setToolTip(self.TRANSLATIONS[self.ui_lang]["reset_tooltip"])
         btn.clicked.connect(callback)
         btn.setStyleSheet("""
             QPushButton {
@@ -797,7 +970,7 @@ class OCRWindow(QMainWindow):
 
     def create_text_processing_group(self, layout):
         """Combined Detection and Merging Settings"""
-        self.text_processing_group = QGroupBox("Text Detection & Merging")
+        self.text_processing_group = QGroupBox(self.TRANSLATIONS[self.ui_lang]["text_proc_group"])
         g_layout = QVBoxLayout()
         td_config = self.config.get("text_detection", {})
         
@@ -814,9 +987,9 @@ class OCRWindow(QMainWindow):
         viz_box.addStretch()
         
         # Add legend/info next to it
-        legend = QLabel("🟥 Red: Min Size Filter\n🟨 Yellow: Merge Zone\n🟦 Blue: Reference Box")
-        legend.setStyleSheet("color: #aaa; font-size: 10px;")
-        viz_box.addWidget(legend)
+        self.legend = QLabel(self.TRANSLATIONS[self.ui_lang]["legend_text"])
+        self.legend.setStyleSheet("color: #aaa; font-size: 10px;")
+        viz_box.addWidget(self.legend)
         
         g_layout.addWidget(viz_container)
         g_layout.addSpacing(10)
@@ -828,12 +1001,14 @@ class OCRWindow(QMainWindow):
             g_layout.addWidget(lbl)
 
         # --- Section 1: Detection (Size) ---
-        add_header("1. Detection Filter (Adaptive)")
+        self.detection_header_label = QLabel(self.TRANSLATIONS[self.ui_lang]["detection_header"])
+        self.detection_header_label.setStyleSheet("font-weight: bold; color: #007acc; margin-top: 5px;")
+        g_layout.addWidget(self.detection_header_label)
         
         # Info label explaining adaptive logic
-        info_label = QLabel("Uses ratios relative to text size - works across all screen sizes!")
-        info_label.setStyleSheet("color: #4CAF50; font-size: 9px; font-style: italic; padding: 3px;")
-        g_layout.addWidget(info_label)
+        self.detection_info_label = QLabel(self.TRANSLATIONS[self.ui_lang]["detection_info"])
+        self.detection_info_label.setStyleSheet("color: #4CAF50; font-size: 9px; font-style: italic; padding: 3px;")
+        g_layout.addWidget(self.detection_info_label)
         
         def update_viz_detection():
             # For visualization, estimate pixels from ratios (assume 1920x1080 screen)
@@ -846,7 +1021,8 @@ class OCRWindow(QMainWindow):
         # Min Height Ratio (as % of screen height)
         h_ratio_row = QHBoxLayout()
         h_ratio_row.setSpacing(8)
-        h_ratio_row.addWidget(QLabel("Min Height Ratio:"))
+        self.label_min_height_ratio = QLabel(self.TRANSLATIONS[self.ui_lang]["label_min_height_ratio"])
+        h_ratio_row.addWidget(self.label_min_height_ratio)
         h_ratio_sl = QSlider(Qt.Orientation.Horizontal)
         h_ratio_sl.setRange(0, 50)  # 0% to 5% of screen height
         h_ratio_val = td_config.get("min_height_ratio", 0.031)
@@ -890,7 +1066,8 @@ class OCRWindow(QMainWindow):
         # Median Height Fraction (noise filter)
         median_row = QHBoxLayout()
         median_row.setSpacing(8)
-        median_row.addWidget(QLabel("Noise Filter:"))
+        self.label_noise_filter = QLabel(self.TRANSLATIONS[self.ui_lang]["label_noise_filter"])
+        median_row.addWidget(self.label_noise_filter)
         median_sl = QSlider(Qt.Orientation.Horizontal)
         median_sl.setRange(10, 100)  # 0.1 to 1.0
         median_val = td_config.get("median_height_fraction", 1.0)
@@ -932,7 +1109,9 @@ class OCRWindow(QMainWindow):
         g_layout.addWidget(self.create_separator())
 
         # --- Section 2: Merging ---
-        add_header("2. Merging & Reading Order")
+        self.merging_header_label = QLabel(self.TRANSLATIONS[self.ui_lang]["merging_header"])
+        self.merging_header_label.setStyleSheet("font-weight: bold; color: #007acc; margin-top: 5px;")
+        g_layout.addWidget(self.merging_header_label)
         
         # Reading Direction
         sort_config = self.config.get("text_sorting", {})
@@ -947,12 +1126,13 @@ class OCRWindow(QMainWindow):
             sort_config = self.config["text_sorting"]
         dir_row = QHBoxLayout()
         dir_row.setSpacing(8)
-        dir_row.addWidget(QLabel("Order:"))
+        self.label_order = QLabel(self.TRANSLATIONS[self.ui_lang]["label_order"])
+        dir_row.addWidget(self.label_order)
         self.order_combo = QComboBox()
-        self.order_combo.addItem("Left to Right (Standard)", "horizontal_ltr")
-        self.order_combo.addItem("Right to Left (Manga)", "horizontal_rtl")
-        self.order_combo.addItem("Vertical Columns (RTL)", "vertical_rtl")
-        self.order_combo.addItem("Vertical Columns (LTR)", "vertical_ltr")
+        self.order_combo.addItem(self.TRANSLATIONS[self.ui_lang]["order_ltr"], "horizontal_ltr")
+        self.order_combo.addItem(self.TRANSLATIONS[self.ui_lang]["order_rtl"], "horizontal_rtl")
+        self.order_combo.addItem(self.TRANSLATIONS[self.ui_lang]["order_vertical_rtl"], "vertical_rtl")
+        self.order_combo.addItem(self.TRANSLATIONS[self.ui_lang]["order_vertical_ltr"], "vertical_ltr")
         
         cur_dir = sort_config.get("direction", "horizontal_ltr")
         idx = self.order_combo.findData(cur_dir)
@@ -984,12 +1164,14 @@ class OCRWindow(QMainWindow):
             self.settings_viz.update_merge(vt, ht, rat)
 
         # Helper for merge ratio sliders
-        def add_merge_ratio_slider(label, key, default, max_val=5.0, tooltip=""):
+        def add_merge_ratio_slider(label_key, tooltip_key, key, default, max_val=5.0):
             row = QHBoxLayout()
             row.setSpacing(8)
-            lbl = QLabel(label)
-            if tooltip:
-                lbl.setToolTip(tooltip)
+            lbl = QLabel(self.TRANSLATIONS[self.ui_lang][label_key])
+            if tooltip_key:
+                lbl.setToolTip(self.TRANSLATIONS[self.ui_lang][tooltip_key])
+            # Store label reference for translation updates
+            setattr(self, label_key, lbl)
             row.addWidget(lbl)
             
             sl = QSlider(Qt.Orientation.Horizontal)
@@ -1037,17 +1219,15 @@ class OCRWindow(QMainWindow):
             row.addWidget(reset_btn)
             g_layout.addLayout(row)
 
-        add_merge_ratio_slider("V. Ratio:", "merge_vertical_ratio", 0.07, max_val=2.0, 
-                              tooltip="Vertical gap as multiplier of text height (e.g., 0.07 = tight vertical merging)")
-        add_merge_ratio_slider("H. Ratio:", "merge_horizontal_ratio", 0.37, max_val=5.0,
-                              tooltip="Horizontal gap as multiplier of text height (e.g., 0.37 = tight horizontal merging)")
-        add_merge_ratio_slider("Width Ratio:", "merge_width_ratio_threshold", 0.75, max_val=1.0,
-                              tooltip="Minimum horizontal overlap ratio for vertical merging")
+        add_merge_ratio_slider("label_v_ratio", "tooltip_v_ratio", "merge_vertical_ratio", 0.07, max_val=2.0)
+        add_merge_ratio_slider("label_h_ratio", "tooltip_h_ratio", "merge_horizontal_ratio", 0.37, max_val=5.0)
+        add_merge_ratio_slider("label_width_ratio", "tooltip_width_ratio", "merge_width_ratio_threshold", 0.75, max_val=1.0)
 
         # Line Grouping (Sorting)
         grp_row = QHBoxLayout()
         grp_row.setSpacing(8)
-        grp_row.addWidget(QLabel("Line Grouping:"))
+        self.label_line_grouping = QLabel(self.TRANSLATIONS[self.ui_lang]["label_line_grouping"])
+        grp_row.addWidget(self.label_line_grouping)
         g_sl = QSlider(Qt.Orientation.Horizontal)
         g_sl.setRange(1, 20)
         grp_val = sort_config.get("group_tolerance", 0.5)
@@ -1100,14 +1280,14 @@ class OCRWindow(QMainWindow):
 
     def create_tts_group(self, layout):
         """Text-to-Speech Settings with Voice Selection and Media Player"""
-        self.tts_group = QGroupBox("🔊 Text-to-Speech (Kokoro)")
+        self.tts_group = QGroupBox(self.TRANSLATIONS[self.ui_lang]["tts_group"])
         g_layout = QVBoxLayout()
         tts_config = self.config.get("tts", {})
 
         # Info label (TTS is always enabled)
-        info_label = QLabel("TTS is always enabled - text will be read aloud automatically")
-        info_label.setStyleSheet("color: #4CAF50; font-style: italic; padding: 5px;")
-        g_layout.addWidget(info_label)
+        self.tts_info_label = QLabel(self.TRANSLATIONS[self.ui_lang]["tts_info"])
+        self.tts_info_label.setStyleSheet("color: #4CAF50; font-style: italic; padding: 5px;")
+        g_layout.addWidget(self.tts_info_label)
 
         # Store full voice list for filtering (dynamically fetched from HuggingFace)
         from src.backend.core.tts import get_available_voices
@@ -1115,13 +1295,15 @@ class OCRWindow(QMainWindow):
 
         # 0. Voice Filters Row
         filter_row = QHBoxLayout()
-        filter_row.addWidget(QLabel("Language:"))
+        self.label_language_filter = QLabel(self.TRANSLATIONS[self.ui_lang]["label_language"])
+        filter_row.addWidget(self.label_language_filter)
         self.lang_filter = QComboBox()
         self.lang_filter.addItems(["All", "🇺🇸 American", "🇬🇧 British"])
         self.lang_filter.currentIndexChanged.connect(self.filter_voices)
         filter_row.addWidget(self.lang_filter)
         
-        filter_row.addWidget(QLabel("Gender:"))
+        self.label_gender_filter = QLabel(self.TRANSLATIONS[self.ui_lang]["label_gender"])
+        filter_row.addWidget(self.label_gender_filter)
         self.gender_filter = QComboBox()
         self.gender_filter.addItems(["All", "Male", "Female"])
         self.gender_filter.currentIndexChanged.connect(self.filter_voices)
@@ -1130,7 +1312,8 @@ class OCRWindow(QMainWindow):
 
         # 1. Voice Selection Row
         voice_row = QHBoxLayout()
-        voice_row.addWidget(QLabel("Voice:"))
+        self.label_voice = QLabel(self.TRANSLATIONS[self.ui_lang]["label_voice"])
+        voice_row.addWidget(self.label_voice)
         self.voice_combo = QComboBox()
         # Initialize voice combo with all voices first
         for name, code in self.all_voices.items():
@@ -1151,7 +1334,8 @@ class OCRWindow(QMainWindow):
 
         # 2. Speed Slider
         speed_row = QHBoxLayout()
-        speed_row.addWidget(QLabel("Speed:"))
+        self.label_speed = QLabel(self.TRANSLATIONS[self.ui_lang]["label_speed"])
+        speed_row.addWidget(self.label_speed)
         
         self.sl_speed = QSlider(Qt.Orientation.Horizontal)
         self.sl_speed.setRange(5, 20)  # 0.5x to 2.0x
@@ -1182,7 +1366,8 @@ class OCRWindow(QMainWindow):
 
         # 2b. Volume Slider
         volume_row = QHBoxLayout()
-        volume_row.addWidget(QLabel("Volume:"))
+        self.label_volume = QLabel(self.TRANSLATIONS[self.ui_lang]["label_volume"])
+        volume_row.addWidget(self.label_volume)
         
         self.sl_volume = QSlider(Qt.Orientation.Horizontal)
         self.sl_volume.setRange(0, 200)  # 0% to 200%
@@ -1213,17 +1398,17 @@ class OCRWindow(QMainWindow):
 
         # 3. Media Player Controls
         player_layout = QHBoxLayout()
-        self.btn_play_new = QPushButton("▶ Play")
+        self.btn_play_new = QPushButton(self.TRANSLATIONS[self.ui_lang]["btn_play"])
         self.btn_play_new.clicked.connect(self.play_tts_with_settings)
-        self.btn_play_new.setToolTip("Re-generate and play TTS with current voice/speed settings")
+        self.btn_play_new.setToolTip(self.TRANSLATIONS[self.ui_lang]["btn_play_tooltip"])
         
-        self.btn_replay = QPushButton("🔁 Replay")
+        self.btn_replay = QPushButton(self.TRANSLATIONS[self.ui_lang]["btn_replay"])
         self.btn_replay.clicked.connect(self.replay_audio)
-        self.btn_replay.setToolTip("Replay the last generated audio (same voice/speed)")
+        self.btn_replay.setToolTip(self.TRANSLATIONS[self.ui_lang]["btn_replay_tooltip"])
         
-        self.btn_stop_audio = QPushButton("⏹ Stop")
+        self.btn_stop_audio = QPushButton(self.TRANSLATIONS[self.ui_lang]["btn_stop"])
         self.btn_stop_audio.clicked.connect(self.stop_audio)
-        self.btn_stop_audio.setToolTip("Stop current audio playback")
+        self.btn_stop_audio.setToolTip(self.TRANSLATIONS[self.ui_lang]["btn_stop_tooltip"])
         
         player_layout.addWidget(self.btn_play_new)
         player_layout.addWidget(self.btn_replay)
@@ -1231,13 +1416,13 @@ class OCRWindow(QMainWindow):
         g_layout.addLayout(player_layout)
 
         # 4. Phoneme Display (IPA tokens)
-        phoneme_label = QLabel("Phonemes (IPA):")
-        phoneme_label.setStyleSheet("color: #aaa; font-size: 11px;")
-        g_layout.addWidget(phoneme_label)
+        self.label_phonemes = QLabel(self.TRANSLATIONS[self.ui_lang]["label_phonemes"])
+        self.label_phonemes.setStyleSheet("color: #aaa; font-size: 11px;")
+        g_layout.addWidget(self.label_phonemes)
         
         self.phoneme_output = QLineEdit()
         self.phoneme_output.setReadOnly(True)
-        self.phoneme_output.setPlaceholderText("Phonemes will appear here after text is read...")
+        self.phoneme_output.setPlaceholderText(self.TRANSLATIONS[self.ui_lang]["phonemes_placeholder"])
         self.phoneme_output.setStyleSheet("background: #111; color: #888; font-family: monospace; font-size: 10px; padding: 4px;")
         g_layout.addWidget(self.phoneme_output)
 
@@ -2320,4 +2505,178 @@ class OCRWindow(QMainWindow):
     def apply_dark_theme(self):
         """Apply dark theme using built-in QSS (no external dependencies)"""
         self.setStyleSheet(DARK_THEME_STYLESHEET)
+
+    def change_ui_language(self):
+        """Handle UI language change and save globally"""
+        self.ui_lang = self.lang_combo.currentData()
+        save_app_settings({"ui_lang": self.ui_lang})
+        self.retranslateUi()
+
+    def retranslateUi(self):
+        """Update all UI text based on selected language"""
+        t = self.TRANSLATIONS[self.ui_lang]
+        
+        # Set Layout Direction
+        if self.ui_lang == "ar":
+            self.setLayoutDirection(Qt.LayoutDirection.RightToLeft)
+        else:
+            self.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
+
+        # Update Main Labels
+        self.setWindowTitle(t["window_title"])
+        
+        # Update Model Info
+        if hasattr(self, 'model_info'):
+            self.model_info.setText(t["model_info"])
+        
+        # Update Groups
+        if hasattr(self, 'profile_group'):
+            self.profile_group.setTitle(t["profile_group"])
+        if hasattr(self, 'selection_group'):
+            self.selection_group.setTitle(t["selection_group"])
+        if hasattr(self, 'image_settings_group'):
+            self.image_settings_group.setTitle(t["img_adj_group"])
+        if hasattr(self, 'text_processing_group'):
+            self.text_processing_group.setTitle(t["text_proc_group"])
+        if hasattr(self, 'tts_group'):
+            self.tts_group.setTitle(t["tts_group"])
+        if hasattr(self, 'status_group'):
+            self.status_group.setTitle(t["status_group"])
+        if hasattr(self, 'output_group'):
+            self.output_group.setTitle(t["output_group"])
+        
+        # Update Preview Label
+        if hasattr(self, 'preview_label'):
+            self.preview_label.setText(t["preview_label"])
+        
+        # Update Lock Notice
+        if hasattr(self, 'lock_notice'):
+            self.lock_notice.setText(t["lock_notice"])
+        
+        # Update Buttons
+        if hasattr(self, 'btn_capture'):
+            self.btn_capture.setText(t["btn_capture"])
+        if hasattr(self, 'btn_extract'):
+            self.btn_extract.setText(t["btn_extract"])
+        if hasattr(self, 'btn_cancel'):
+            self.btn_cancel.setText(t["btn_cancel"])
+        if hasattr(self, 'status_label'):
+            self.status_label.setText(t["status_ready"])
+        
+        # Update Selection Tools
+        if hasattr(self, 'chk_rapid'):
+            self.chk_rapid.setText(t["chk_rapid"])
+            self.chk_rapid.setToolTip(t["chk_rapid_tooltip"])
+        if hasattr(self, 'btn_tool_none'):
+            self.btn_tool_none.setText(t["btn_tool_none"])
+        if hasattr(self, 'btn_tool_add'):
+            self.btn_tool_add.setText(t["btn_tool_add"])
+        if hasattr(self, 'btn_tool_sub'):
+            self.btn_tool_sub.setText(t["btn_tool_sub"])
+        if hasattr(self, 'btn_tool_manual'):
+            self.btn_tool_manual.setText(t["btn_tool_manual"])
+        if hasattr(self, 'btn_sel_all'):
+            self.btn_sel_all.setText(t["btn_sel_all"])
+        if hasattr(self, 'btn_desel_all'):
+            self.btn_desel_all.setText(t["btn_desel_all"])
+        if hasattr(self, 'btn_clear_manual'):
+            self.btn_clear_manual.setText(t["btn_clear_manual"])
+        
+        # Update Profile Button Tooltips
+        if hasattr(self, 'btn_new_profile'):
+            self.btn_new_profile.setToolTip(t["btn_new_profile_tooltip"])
+        if hasattr(self, 'btn_rename_profile'):
+            self.btn_rename_profile.setToolTip(t["btn_rename_profile_tooltip"])
+        if hasattr(self, 'btn_delete_profile'):
+            self.btn_delete_profile.setToolTip(t["btn_delete_profile_tooltip"])
+        
+        # Update Language Label and Globe Button
+        if hasattr(self, 'lang_label'):
+            self.lang_label.setText(t["ui_lang_label"])
+        if hasattr(self, 'lang_globe_btn'):
+            self.lang_globe_btn.setToolTip(t["ui_lang_label"])
+        
+        # Update Image Settings Labels
+        if hasattr(self, 'label_max_dimension'):
+            self.label_max_dimension.setText(t["label_max_dimension"])
+        if hasattr(self, 'label_colors'):
+            self.label_colors.setText(t["label_colors"])
+        if hasattr(self, 'chk_invert'):
+            # Update combo box items
+            current_index = self.chk_invert.currentIndex()
+            self.chk_invert.clear()
+            self.chk_invert.addItem(t["colors_normal"], False)
+            self.chk_invert.addItem(t["colors_invert"], True)
+            self.chk_invert.setCurrentIndex(current_index)
+        
+        # Update Text Processing Labels
+        if hasattr(self, 'legend'):
+            self.legend.setText(t["legend_text"])
+        if hasattr(self, 'detection_header_label'):
+            self.detection_header_label.setText(t["detection_header"])
+        if hasattr(self, 'detection_info_label'):
+            self.detection_info_label.setText(t["detection_info"])
+        if hasattr(self, 'label_min_height_ratio'):
+            self.label_min_height_ratio.setText(t["label_min_height_ratio"])
+        if hasattr(self, 'label_noise_filter'):
+            self.label_noise_filter.setText(t["label_noise_filter"])
+        if hasattr(self, 'merging_header_label'):
+            self.merging_header_label.setText(t["merging_header"])
+        if hasattr(self, 'label_order'):
+            self.label_order.setText(t["label_order"])
+        if hasattr(self, 'order_combo'):
+            # Update order combo items
+            current_data = self.order_combo.currentData()
+            self.order_combo.clear()
+            self.order_combo.addItem(t["order_ltr"], "horizontal_ltr")
+            self.order_combo.addItem(t["order_rtl"], "horizontal_rtl")
+            self.order_combo.addItem(t["order_vertical_rtl"], "vertical_rtl")
+            self.order_combo.addItem(t["order_vertical_ltr"], "vertical_ltr")
+            idx = self.order_combo.findData(current_data)
+            if idx >= 0:
+                self.order_combo.setCurrentIndex(idx)
+        # Update merge ratio labels
+        if hasattr(self, 'label_v_ratio'):
+            self.label_v_ratio.setText(t["label_v_ratio"])
+            self.label_v_ratio.setToolTip(t["tooltip_v_ratio"])
+        if hasattr(self, 'label_h_ratio'):
+            self.label_h_ratio.setText(t["label_h_ratio"])
+            self.label_h_ratio.setToolTip(t["tooltip_h_ratio"])
+        if hasattr(self, 'label_width_ratio'):
+            self.label_width_ratio.setText(t["label_width_ratio"])
+            self.label_width_ratio.setToolTip(t["tooltip_width_ratio"])
+        if hasattr(self, 'label_line_grouping'):
+            self.label_line_grouping.setText(t["label_line_grouping"])
+        
+        # Update TTS Labels
+        if hasattr(self, 'tts_info_label'):
+            self.tts_info_label.setText(t["tts_info"])
+        if hasattr(self, 'label_language_filter'):
+            self.label_language_filter.setText(t["label_language"])
+        if hasattr(self, 'label_gender_filter'):
+            self.label_gender_filter.setText(t["label_gender"])
+        if hasattr(self, 'label_voice'):
+            self.label_voice.setText(t["label_voice"])
+        if hasattr(self, 'label_speed'):
+            self.label_speed.setText(t["label_speed"])
+        if hasattr(self, 'label_volume'):
+            self.label_volume.setText(t["label_volume"])
+        if hasattr(self, 'btn_play_new'):
+            self.btn_play_new.setText(t["btn_play"])
+            self.btn_play_new.setToolTip(t["btn_play_tooltip"])
+        if hasattr(self, 'btn_replay'):
+            self.btn_replay.setText(t["btn_replay"])
+            self.btn_replay.setToolTip(t["btn_replay_tooltip"])
+        if hasattr(self, 'btn_stop_audio'):
+            self.btn_stop_audio.setText(t["btn_stop"])
+            self.btn_stop_audio.setToolTip(t["btn_stop_tooltip"])
+        if hasattr(self, 'label_phonemes'):
+            self.label_phonemes.setText(t["label_phonemes"])
+        if hasattr(self, 'phoneme_output'):
+            self.phoneme_output.setPlaceholderText(t["phonemes_placeholder"])
+        
+        # Update all reset button tooltips (buttons with 🔄 emoji)
+        for widget in self.findChildren(QPushButton):
+            if widget.text() == "🔄":
+                widget.setToolTip(t["reset_tooltip"])
 
