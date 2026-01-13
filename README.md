@@ -1,274 +1,43 @@
-# OCR Accessibility Tool
+Here is a detailed, readable summary of the **OCR Accessibility Tool**.
 
-A Python application that reads text aloud from your screen. Press `Ctrl+Shift+Alt+Z` anywhere to capture the active window, automatically detect text regions, extract text using AI, and read it aloud using Kokoro TTS. Perfect for users who cannot read text on screen - an accessibility tool that makes digital content accessible through voice.
+### 🎯 Core Purpose
+A Python application designed for accessibility that captures your screen (or specific active window), uses local AI to extract text, and automatically reads it aloud. It is optimized for Visual Novels and games but works on any screen content.
 
-## Features
+### ✨ Key Features
+*   **One-Key Reading:** Press `Ctrl+Shift+Alt+Z` to capture, detect, extract, and read text instantly.
+*   **Local & Offline:** Uses **H2OVL-Mississippi-0.8B** for high-accuracy OCR and **Kokoro TTS** for natural voice generation. No internet required after setup.
+*   **Smart & Manual Selection:**
+    *   **Smart:** Uses RapidOCR to auto-detect text regions.
+    *   **Manual:** Draw permanent boxes (resolution independent) for fixed dialogue areas.
+    *   **Refinement:** "Photoshop-style" Add/Subtract tools to fine-tune detection areas.
+*   **Configuration Profiles:** Save specific settings (detection sensitivity, voice, boxes) for different games. The "Default" profile is locked as a safety net.
+*   **Multi-Language UI:** Fully translated interface in **English** and **Arabic** (with RTL support).
+*   **Advanced Text Merging:** Intelligently merges split sentences and paragraphs for smooth reading.
 
-- **One-Key Reading**: Press `Ctrl+Shift+Alt+Z` to automatically capture, detect, extract, and read text aloud.
-- **Multi-Language UI**: Full UI translation support with English and Arabic. Language setting is stored separately from profiles and persists across sessions. Arabic interface includes proper RTL (Right-to-Left) layout support.
-- **Smart & Manual Selection**:
-  - **Smart Detection**: Uses RapidOCR to automatically find text on screen (toggleable).
-  - **Manual Boxes**: Draw permanent boxes over fixed areas (like dialogue boxes in Visual Novels). These persist across screenshots, adapt to window resizing, and are saved to config.
-  - **Area Selection**: "Photoshop-style" Add/Subtract selection tools to precisely define where to look (or what to ignore). Uses normalized coordinates for resolution independence.
-- **Text-to-Speech**: Always enabled - automatically reads extracted text using Kokoro TTS (82M parameter, Apache-licensed model).
-- **Local AI Model**: Uses H2OVL-Mississippi-0.8B running locally for high-accuracy text extraction (no internet required).
-- **Auto-Merge Dialogue**: Intelligent merging of split sentences and paragraphs using adaptive logic that works across all screen sizes.
-- **Real-Time Preview**: Native PyQt6 GUI with instant visual feedback for tuning detection settings.
-- **Resolution Independent**: Manual boxes and selection areas use normalized coordinates (0-1), so they work correctly even if you resize the game window or change resolution.
-- **Contained Box Filtering**: Automatically removes smaller boxes that are mostly inside larger manual boxes (keeps the container, discards the inner ones).
-- **Configuration Profiles**: Save different settings for different games. The Default profile is locked and protected, while custom profiles can be created, renamed, and deleted. Switch between profiles instantly with all settings auto-updating.
-- **Loading Screen**: Shows progress bar during model warm-up on startup.
+### ⚠️ Hardware Requirements
+*   **Recommended:** NVIDIA GPU with CUDA (minimum 6GB VRAM). Performance is fast (1-3 seconds).
+*   **Not Recommended:** CPU-only mode. It is untested and will be very slow (10-30+ seconds per capture).
 
-## Requirements
+### 🚀 Installation & Usage
+1.  **Install:** Requires Python 3.12+ and `uv`.
+    *   Run `uv run python install.py` (Auto-detects GPU/CPU).
+2.  **Run:** `uv run python run_gui.py`
+3.  **Hotkeys:**
+    *   `Ctrl+Shift+Alt+Z`: Extract & Read.
+    *   `Ctrl+Shift+Alt+X`: Detect Only (Preview).
 
-- Python 3.12+
-- `uv` package manager (recommended) or standard pip.
-- **Hardware**: 
-  - **⚠️ NVIDIA GPU with CUDA (REQUIRED for acceptable performance)**
-    - Minimum: 6GB+ VRAM recommended
-    - CUDA 12.9 compatible GPU
-  - **⚠️ CPU Mode (NOT RECOMMENDED)**
-    - CPU implementation is **UNTESTED** and **VERY SLOW**
-    - Transformer models (H2OVL-Mississippi, Kokoro TTS) are computationally heavy
-    - Expect 10-30+ seconds per capture on CPU
-    - GPU is **STRONGLY RECOMMENDED** for acceptable performance
+### ⚙️ Configuration Settings
+*   **Preprocessing:** Adjust contrast, brightness, or binarize text (useful for transparent text boxes).
+*   **Text Sorting:** Supports Horizontal (LTR/RTL) and Vertical (LTR/RTL) reading orders (e.g., for Manga).
+*   **TTS:** Adjust speed (0.5x - 2.0x) and choose from available Kokoro voices.
 
-## Installation
+---
 
-1. **Install `uv`** (Fast Python package installer):
-   ```bash
-   curl -LsSf https://astral.sh/uv/install.sh | sh
-   ```
-   (Windows PowerShell: `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`)
-
-2. **Install Dependencies**:
-   Run the automated install script to detect your hardware and install the correct versions of PyTorch, Flash Attention, and models:
-
-   ```bash
-   uv run python install.py
-   ```
-   
-   *Options:*
-   - `uv run python install.py --gpu` (Force GPU installation)
-   - `uv run python install.py --cpu` (Force CPU-only installation)
-
-   **What gets installed:**
-   - Base dependencies from `pyproject.toml` (including opencv-python for RapidOCR)
-   - PyTorch 2.8.0 (GPU with CUDA 12.9, or CPU version - **NOT RECOMMENDED**)
-   - Flash Attention 2.8.2 (GPU only, Windows prebuilt wheel via Hugging Face Hub)
-   - H2OVL-Mississippi dependencies (transformers, accelerate, timm, peft)
-   - Kokoro TTS dependencies (kokoro, misaki[en], loguru, soundfile, sounddevice)
-   - Spacy model (en-core-web-sm) for Kokoro TTS
-   - Default voice (af_heart) pre-downloaded and cached for offline use
-   - RapidOCR (ONNX Runtime, for text detection - CPU or GPU)
-  - onnxruntime-gpu (optional, auto-installed if GPU detected - provides ~27% faster detection)
-   
-   **⚠️ CPU Installation Warning:**
-   - The installer will warn you if no CUDA is detected
-   - CPU mode is untested and will be very slow (10-30+ seconds per capture)
-   - GPU with CUDA is **STRONGLY RECOMMENDED** for acceptable performance
-
-## Quick Start
-
-1. **Run the GUI**:
-   ```bash
-   uv run python run_gui.py
-   ```
-
-2. **Wait for Models to Load**: A loading screen will show progress as models warm up (first run may take a minute to download models).
-
-3. **Capture**:
-   - Switch to your game or application.
-   - Press **`Ctrl+Shift+Alt+Z`** (Extract + Read) or **`Ctrl+Shift+Alt+X`** (Detect Only).
-   - The tool captures the window, extracts text, and starts reading immediately.
-
-4. **Tune (Optional)**:
-   - Switch back to the GUI to see the preview.
-   - Use the **Selection Tools** to refine exactly what text is read.
-
-## Configuration Profiles
-
-The application supports multiple configuration profiles, allowing you to save different settings for different games or use cases. This is especially useful since different games may require different detection parameters, TTS voices, or preprocessing settings.
-
-### Profile Management
-
-- **Default Profile**: The factory default profile is locked and cannot be edited or deleted. It serves as a safe starting point. All settings are grayed out when Default is selected.
-- **Creating Profiles**: Click the **📋 (Duplicate)** button to create a new profile based on the current one. You'll be prompted to enter a name (e.g., "Visual Novel", "RPG", "Manga Reader").
-- **Switching Profiles**: Use the profile dropdown at the top of the settings panel to switch between profiles. All settings automatically update to reflect the selected profile.
-- **Renaming Profiles**: Click the **✏️ (Rename)** button to rename the current profile (Default cannot be renamed).
-- **Deleting Profiles**: Click the **🗑️ (Delete)** button to remove a profile (Default cannot be deleted).
-
-### Profile Storage
-
-- Profiles are stored in `profiles.json` in the application directory.
-- The Default profile is **not** stored in `profiles.json` - it's embedded in the code to prevent accidental deletion.
-- Each profile contains all configuration settings: preprocessing, text detection, text sorting, TTS settings, and manual boxes.
-- When you switch profiles, all UI controls (sliders, dropdowns, etc.) automatically update to show the profile's saved values.
-
-### Workflow Example
-
-1. **Start with Default**: The Default profile provides optimized settings that work for most games.
-2. **Create Game-Specific Profile**: 
-   - Select Default profile
-   - Click **📋** to duplicate it
-   - Name it after your game (e.g., "Final Fantasy VII")
-3. **Customize Settings**: 
-   - Adjust detection parameters for the game's text style
-   - Set TTS voice and speed preferences
-   - Configure manual boxes for fixed dialogue areas
-4. **Switch Easily**: Use the profile dropdown to quickly switch between different game configurations.
-
-## Selection Tools Guide
-
-The GUI provides powerful tools to control exactly what text is processed.
-
-### Toolbar Modes
-- **✋ View**: Pan and zoom the image preview.
-- **➕ Add Area**: Draw a rectangle to *include* this area for Smart Detection. (By default, the whole image is included).
-- **➖ Remove Area**: Draw a rectangle to *exclude* text in this area (e.g., to ignore a chat window, UI elements, or subtitles).
-- **📦 Manual Box**: Draw a **permanent** box.
-  - **Usage**: Perfect for Visual Novels where the text box is always in the same place.
-  - **Behavior**: These boxes **persist** even if you close the app. They use normalized coordinates (0-1), so they stay correct even if you resize the game window or change resolution.
-  - **Editing**: Hover over a manual box and click the red **×** to delete it.
-  - **Clear All**: Use the "Clear Manual" button to remove all manual boxes at once.
-
-### Actions
-- **Select All**: Reset to default state (everything selected).
-- **Deselect All**: Clear all selections (nothing selected).
-- **Clear Manual**: Remove all manually drawn boxes.
-
-### Workflow Examples
-
-**Scenario A: Standard Visual Novel (Fixed Text Box)**
-1. Uncheck "Use Smart Detection (RapidOCR)".
-2. Select **📦 Manual Box**.
-3. Draw a box over the dialogue area.
-4. Done! Now every time you press the hotkey, it only reads that specific area. The box persists across sessions and adapts to window resizing.
-
-**Scenario B: RPG with Dynamic Text bubbles**
-1. Check "Use Smart Detection (RapidOCR)".
-2. If the tool is reading UI numbers (HP/MP) you don't want:
-   - Select **➖ Remove Area**.
-   - Draw boxes over the HP/MP bars.
-3. Now the tool will detect text *everywhere* except those specific spots.
-
-**Scenario C: Mixed Mode (Smart Detection + Manual Safety Net)**
-1. Check "Use Smart Detection (RapidOCR)".
-2. Draw a **📦 Manual Box** over the dialogue area as a backup.
-3. If RapidOCR misses the dialogue, the manual box will catch it.
-4. The contained box filter automatically removes RapidOCR detections that are inside your manual box (keeps the larger manual box).
-
-## UI Language Selection
-
-The application supports multiple UI languages. The language setting is stored globally in `app_settings.json` (independent of profiles), so your language preference persists across all profiles.
-
-- **Available Languages**: English, Arabic (العربية)
-- **How to Change**: Use the language dropdown in the Configuration Profile section (indicated by the 🌐 globe icon)
-- **RTL Support**: Arabic interface automatically switches to Right-to-Left layout
-- **Storage**: Language preference is saved in `app_settings.json` (separate from profile settings)
-
-**Note**: UI language only affects the interface text. OCR and TTS processing remain in English.
-
-## Configuration Settings
-
-Settings are saved per profile in `profiles.json` (or use the embedded Default profile). Key parameters:
-
-- **max_image_dimension**: Downscales huge screenshots to save memory (Default: 1080).
-- **preprocessing**: Adjusts image contrast/brightness before OCR (useful for transparent text boxes).
-  - *binary_threshold*: Binarization threshold (0-255, 0=disabled)
-  - *invert*: Invert colors (useful for dark text on light backgrounds)
-  - *dilation*: Text thickness (-5 to 5, negative values thin text, positive values thicken text, useful for adjusting font thickness)
-  - *contrast*: Contrast multiplier (0.5-3.0)
-  - *brightness*: Brightness adjustment (-100 to 100)
-- **text_detection**:
-  - *use_gpu*: Enable GPU acceleration for RapidOCR (default: auto-detected on first run - True if GPU available, False otherwise). Can be toggled in GUI.
-  - *min_height_ratio*: Filters out tiny text as fraction of screen height (default: 0.031 = 3.1%).
-  - *min_width_ratio*: Minimum width as fraction of screen width (default: 0.0 = disabled).
-  - *median_height_fraction*: Discard boxes smaller than this fraction of median text size (default: 1.0 = 100%, less aggressive noise filtering).
-  - *merge_vertical_ratio*: Vertical gap as multiplier of text height for merging lines (default: 0.07 = tight vertical merging).
-  - *merge_horizontal_ratio*: Horizontal gap as multiplier of text height for merging words (default: 0.37 = tight horizontal merging).
-  - *merge_width_ratio_threshold*: Minimum horizontal overlap ratio for vertical merging (default: 0.75).
-- **text_sorting**:
-  - *direction*: Reading order ("horizontal_ltr", "horizontal_rtl", "vertical_ltr", "vertical_rtl").
-  - *group_tolerance*: Line grouping tolerance multiplier (default: 0.5).
-- **tts**:
-  - *speed*: Speech speed multiplier (0.5-2.0, default: 1.0).
-  - *voice*: Kokoro voice ID (default: "af_heart").
-- **manual_boxes**: Automatically saved list of manual boxes in normalized coordinates (persists across sessions, saved per profile).
-
-**Note**: Each profile maintains its own set of manual boxes, so you can have different selection areas for different games.
-
-## Hotkeys
-
-- **`Ctrl+Shift+Alt+Z`**: Capture screenshot, detect text, extract text, and read aloud (full extraction).
-- **`Ctrl+Shift+Alt+X`**: Capture screenshot and detect text only (preview mode, no extraction).
-
-## Testing
-
-Test scripts are available to verify installation:
-
-- **Test OCR Model**: `python test_ocr_model.py`
-  - Tests H2OVL model on `test.png`
-  - Shows CUDA version, PyTorch version, and Flash Attention status
-  - Displays extracted text from test image
-
-- **Test TTS**: `python test_kokoro_tts.py`
-  - Tests Kokoro TTS installation
-  - Generates and plays test audio
-
-## Troubleshooting
-
-- **Hotkey not working?** Run the terminal/command prompt as Administrator (Windows restriction).
-- **Slow performance?** 
-  - **GPU**: Ensure you installed with `--gpu` and have CUDA installed. GPU mode should take 1-3 seconds per capture.
-  - **CPU**: ⚠️ CPU mode is **UNTESTED** and **VERY SLOW** (10-30+ seconds per capture). This project is designed for NVIDIA GPU with CUDA. CPU implementation may not work correctly and is not recommended.
-- **Manual Boxes disappeared?** They are saved in `profiles.json` under each profile's `manual_boxes`. If you deleted the profile or the profiles file, they are reset. The Default profile's manual boxes are not persisted (it's read-only).
-- **Settings not saving?** Make sure you're not using the Default profile (which is locked). Duplicate it to create an editable profile.
-- **Profile corrupted?** If `profiles.json` is corrupted, the application will automatically fall back to the Default profile. You can delete `profiles.json` to start fresh.
-- **Text box selected but not reading?** Check the "Preprocessing" tab. Try increasing "Contrast" or using "Binary Threshold" if the text blends into the background.
-- **Loading screen stuck?** First run downloads models (~1.6GB H2OVL + ~300MB Kokoro). Check your internet connection and disk space.
-- **Flash Attention warnings?** These are informational - the model will use SDPA fallback if Flash Attention isn't available. GPU performance may be slower without Flash Attention.
-
-## Architecture
-
-- **Frontend**: PyQt6 (Native Desktop GUI) for zero-latency interactions.
-- **Backend**: 
-  - **RapidOCR (ONNX)**: Initial text detection (CPU or GPU-accelerated if onnxruntime-gpu is installed).
-  - **H2OVL-Mississippi (PyTorch)**: Vision-Language Model for accurate text recognition.
-  - **Kokoro (ONNX/PyTorch)**: High-quality offline Text-to-Speech.
-- **State Management**: Centralized state with normalized coordinates for resolution-independent selections.
-- **Worker Threads**: OCR and TTS run in background threads to keep UI responsive.
-- **Caching**: Detection results are cached per screenshot version for fast preview updates.
-
-## Notes
-
-- **⚠️ GPU Requirement**: This project is **designed for NVIDIA GPU with CUDA**. CPU implementation is untested, very slow (10-30+ seconds per capture), and not recommended. GPU is required for acceptable performance.
-- **Windows**: The `keyboard` library requires administrator privileges for global hotkeys.
-- **Screenshot**: Captures only the active window (not the full screen).
-- **Local Processing**: All OCR processing happens locally - no internet connection or API keys required (except for initial model downloads).
-- **Accessibility Focus**: This tool is designed to help users who cannot read text on screen - text is always read aloud automatically.
-- **Normalized Coordinates**: Manual boxes and selections use 0-1 coordinates, making them work across different resolutions and aspect ratios.
-
-## Acknowledgements
-
+### 🙌 Acknowledgements (Shouts)
 This project would not be possible without the incredible work of the following open-source projects, models, and communities:
 
-### Core Technologies
-
-- **[RapidOCR](https://github.com/RapidAI/RapidOCR)** - Fast and accurate text detection using ONNX Runtime. This project uses RapidOCR for initial text region detection, which can run on both CPU and GPU (with onnxruntime-gpu) for ~27% faster performance.
-
-- **[H2OVL-Mississippi-0.8B](https://huggingface.co/h2oai/h2ovl-mississippi-800m)** - The vision-language model from H2O.ai that powers the text extraction. This 800M parameter model provides high-accuracy OCR locally without requiring internet connectivity or API keys.
-
-- **[Kokoro TTS](https://huggingface.co/hexgrad/Kokoro-82M)** - The 82M parameter text-to-speech model by hexgrad that reads extracted text aloud. Kokoro provides high-quality, natural-sounding speech with Apache-licensed weights, making it perfect for offline accessibility applications.
-
-- **[Flash Attention 2 for Windows](https://huggingface.co/ussoewwin/Flash-Attention-2_for_Windows)** - Prebuilt Windows wheels for Flash Attention 2.8.2 that enable efficient GPU acceleration for transformer models. The prebuilt wheels from ussoewwin make it possible to use Flash Attention on Windows without complex compilation.
-
-### Inspiration & Code
-
-- **[comic-translate](https://github.com/ogkalu2/comic-translate)** by [ogkalu2](https://github.com/ogkalu2) - This project was heavily inspired by comic-translate and borrows several key algorithms and design patterns:
-  - **Text Region Filtering**: Adaptive filtering logic that works across different screen sizes using statistical median-based filtering
-  - **Text Box Merging**: Intelligent merging algorithms for combining split words and lines into coherent paragraphs
-  - **Reading Order Sorting**: Multi-directional text sorting (horizontal LTR/RTL, vertical LTR/RTL) for proper text ordering
-  - **Contained Box Filtering**: Logic for removing smaller boxes contained within larger manual selections
-  
-  The text detection, filtering, and merging algorithms in this project are adapted from comic-translate's excellent work on handling text regions in complex visual environments.
+*   **[RapidOCR](https://github.com/RapidAI/RapidOCR)** - Fast and accurate text detection using ONNX Runtime. This project uses RapidOCR for initial text region detection, which can run on both CPU and GPU (with onnxruntime-gpu) for ~27% faster performance.
+*   **[H2OVL-Mississippi-0.8B](https://huggingface.co/h2oai/h2ovl-mississippi-800m)** - The vision-language model from H2O.ai that powers the text extraction. This 800M parameter model provides high-accuracy OCR locally without requiring internet connectivity or API keys.
+*   **[Kokoro TTS](https://huggingface.co/hexgrad/Kokoro-82M)** - The 82M parameter text-to-speech model by hexgrad that reads extracted text aloud. Kokoro provides high-quality, natural-sounding speech with Apache-licensed weights, making it perfect for offline accessibility applications.
+*   **[Flash Attention 2 for Windows](https://huggingface.co/ussoewwin/Flash-Attention-2_for_Windows)** - Prebuilt Windows wheels for Flash Attention 2.8.2 that enable efficient GPU acceleration for transformer models. The prebuilt wheels from ussoewwin make it possible to use Flash Attention on Windows without complex compilation.
+*   **[comic-translate](https://github.com/ogkalu2/comic-translate)** by **[ogkalu2](https://github.com/ogkalu2)** - This project was heavily inspired by comic-translate and borrows several key algorithms including text region filtering, text box merging logic, reading order sorting, and contained box filtering.
