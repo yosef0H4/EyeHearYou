@@ -40,6 +40,11 @@ FACTORY_DEFAULT = {
         "direction": "horizontal_ltr",  # Options: horizontal_ltr, horizontal_rtl, vertical_ltr, vertical_rtl
         "group_tolerance": 0.5          # Multiplier for line/column grouping (0.1-2.0)
     },
+    "hotkeys": {
+        "extract": "ctrl+shift+alt+z",
+        "replay": "ctrl+shift+alt+x",
+        "detect": "ctrl+shift+alt+m"
+    },
     "manual_boxes": []
 }
 
@@ -182,6 +187,14 @@ def _validate_and_migrate_config(config):
     if "manual_boxes" not in config:
         config["manual_boxes"] = FACTORY_DEFAULT["manual_boxes"].copy()
     
+    # Ensure hotkeys config exists
+    if "hotkeys" not in config:
+        config["hotkeys"] = FACTORY_DEFAULT["hotkeys"].copy()
+    else:
+        for key, default_value in FACTORY_DEFAULT["hotkeys"].items():
+            if key not in config["hotkeys"]:
+                config["hotkeys"][key] = default_value
+
     return config
 
 

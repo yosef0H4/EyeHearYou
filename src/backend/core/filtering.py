@@ -27,6 +27,10 @@ def sort_text_regions_by_reading_order(text_regions, direction='horizontal_ltr',
     if not text_regions:
         return []
     
+    # Ensure direction is valid (handle None or empty string)
+    if not direction:
+        direction = 'horizontal_ltr'
+    
     # Backward compatibility: map old 'ltr'/'rtl' to new format
     if direction == 'ltr':
         direction = 'horizontal_ltr'

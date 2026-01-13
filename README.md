@@ -248,3 +248,27 @@ Test scripts are available to verify installation:
 - **Local Processing**: All OCR processing happens locally - no internet connection or API keys required (except for initial model downloads).
 - **Accessibility Focus**: This tool is designed to help users who cannot read text on screen - text is always read aloud automatically.
 - **Normalized Coordinates**: Manual boxes and selections use 0-1 coordinates, making them work across different resolutions and aspect ratios.
+
+## Acknowledgements
+
+This project would not be possible without the incredible work of the following open-source projects, models, and communities:
+
+### Core Technologies
+
+- **[RapidOCR](https://github.com/RapidAI/RapidOCR)** - Fast and accurate text detection using ONNX Runtime. This project uses RapidOCR for initial text region detection, which can run on both CPU and GPU (with onnxruntime-gpu) for ~27% faster performance.
+
+- **[H2OVL-Mississippi-0.8B](https://huggingface.co/h2oai/h2ovl-mississippi-800m)** - The vision-language model from H2O.ai that powers the text extraction. This 800M parameter model provides high-accuracy OCR locally without requiring internet connectivity or API keys.
+
+- **[Kokoro TTS](https://huggingface.co/hexgrad/Kokoro-82M)** - The 82M parameter text-to-speech model by hexgrad that reads extracted text aloud. Kokoro provides high-quality, natural-sounding speech with Apache-licensed weights, making it perfect for offline accessibility applications.
+
+- **[Flash Attention 2 for Windows](https://huggingface.co/ussoewwin/Flash-Attention-2_for_Windows)** - Prebuilt Windows wheels for Flash Attention 2.8.2 that enable efficient GPU acceleration for transformer models. The prebuilt wheels from ussoewwin make it possible to use Flash Attention on Windows without complex compilation.
+
+### Inspiration & Code
+
+- **[comic-translate](https://github.com/ogkalu2/comic-translate)** by [ogkalu2](https://github.com/ogkalu2) - This project was heavily inspired by comic-translate and borrows several key algorithms and design patterns:
+  - **Text Region Filtering**: Adaptive filtering logic that works across different screen sizes using statistical median-based filtering
+  - **Text Box Merging**: Intelligent merging algorithms for combining split words and lines into coherent paragraphs
+  - **Reading Order Sorting**: Multi-directional text sorting (horizontal LTR/RTL, vertical LTR/RTL) for proper text ordering
+  - **Contained Box Filtering**: Logic for removing smaller boxes contained within larger manual selections
+  
+  The text detection, filtering, and merging algorithms in this project are adapted from comic-translate's excellent work on handling text regions in complex visual environments.

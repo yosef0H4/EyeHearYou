@@ -28,7 +28,7 @@ from src.backend.core.filtering import (
     generate_selection_mask
 )
 from src.backend.core.merging import merge_close_text_boxes
-from src.frontend.widgets import UnifiedSettingsViz, ResizeVizWidget, ManualBoxItem
+from src.frontend.widgets import UnifiedSettingsViz, ResizeVizWidget, ManualBoxItem, HotkeyRecorder
 from src.frontend.worker import OCRWorker
 from src.frontend.theme import DARK_THEME_STYLESHEET
 from src.frontend.constants import KEYBOARD_AVAILABLE, keyboard
@@ -68,6 +68,7 @@ class OCRWindow(QMainWindow):
             "btn_new_profile_tooltip": "Duplicate current profile",
             "btn_rename_profile_tooltip": "Rename current profile",
             "btn_delete_profile_tooltip": "Delete current profile",
+            "hotkeys_group": "Hotkeys",
             "label_max_dimension": "Max Dimension:",
             "label_colors": "Colors:",
             "colors_normal": "Normal Colors",
@@ -137,6 +138,7 @@ class OCRWindow(QMainWindow):
             "btn_new_profile_tooltip": "نسخ ملف التعريف الحالي",
             "btn_rename_profile_tooltip": "إعادة تسمية ملف التعريف الحالي",
             "btn_delete_profile_tooltip": "حذف ملف التعريف الحالي",
+            "hotkeys_group": "اختصارات لوحة المفاتيح",
             "label_max_dimension": "الحد الأقصى للأبعاد:",
             "label_colors": "الألوان:",
             "colors_normal": "ألوان عادية",
@@ -287,6 +289,9 @@ class OCRWindow(QMainWindow):
 
         # NEW: Selection Tools Group
         self.create_selection_group(controls_layout)
+
+        # NEW: Hotkeys Group
+        self.create_hotkeys_group(controls_layout)
 
         # 2. Image Adjustments Group (Consolidated)
         self.create_image_settings_group(controls_layout)
@@ -459,6 +464,7 @@ class OCRWindow(QMainWindow):
         # Lock/Unlock all setting groups
         groups = [
             getattr(self, 'selection_group', None),
+            getattr(self, 'hotkeys_group', None),
             getattr(self, 'image_settings_group', None),
             getattr(self, 'text_processing_group', None),
             getattr(self, 'tts_group', None)
@@ -671,6 +677,54 @@ class OCRWindow(QMainWindow):
         
         self.selection_group.setLayout(g_layout)
         layout.addWidget(self.selection_group)
+
+    def create_hotkeys_group(self, layout):
+        """Create Hotkeys Configuration Group"""
+        self.hotkeys_group = QGroupBox(self.TRANSLATIONS[self.ui_lang]["hotkeys_group"])
+        g_layout = QVBoxLayout()
+        
+        hotkeys = self.config.get("hotkeys", {
+            "extract": "ctrl+shift+alt+z",
+            "replay": "ctrl+shift+alt+x",
+            "detect": "ctrl+shift+alt+m"
+        })
+        
+        # Extract Hotkey
+        self.btn_hk_extract = HotkeyRecorder("extract", hotkeys.get("extract", "ctrl+shift+alt+z"))
+        self.btn_hk_extract.hotkeyChanged.connect(self.update_hotkey)
+        self.btn_hk_extract.setToolTip("Full Process: Screenshot -> Detect -> Extract -> Read")
+        g_layout.addWidget(self.btn_hk_extract)
+
+        # Replay Hotkey
+        self.btn_hk_replay = HotkeyRecorder("replay", hotkeys.get("replay", "ctrl+shift+alt+x"))
+        self.btn_hk_replay.hotkeyChanged.connect(self.update_hotkey)
+        self.btn_hk_replay.setToolTip("Replay last spoken text")
+        g_layout.addWidget(self.btn_hk_replay)
+
+        # Detect Hotkey
+        self.btn_hk_detect = HotkeyRecorder("detect", hotkeys.get("detect", "ctrl+shift+alt+m"))
+        self.btn_hk_detect.hotkeyChanged.connect(self.update_hotkey)
+        self.btn_hk_detect.setToolTip("Preview: Screenshot -> Detect Only")
+        g_layout.addWidget(self.btn_hk_detect)
+        
+        # Store widgets for profile refresh
+        self._config_widgets["hotkeys.extract"] = (None, None, self.btn_hk_extract)
+        self._config_widgets["hotkeys.replay"] = (None, None, self.btn_hk_replay)
+        self._config_widgets["hotkeys.detect"] = (None, None, self.btn_hk_detect)
+
+        self.hotkeys_group.setLayout(g_layout)
+        layout.addWidget(self.hotkeys_group)
+
+    def update_hotkey(self, key_type, new_hotkey):
+        """Update hotkey in config and re-register listeners"""
+        if "hotkeys" not in self.config:
+            self.config["hotkeys"] = {}
+        
+        self.config["hotkeys"][key_type] = new_hotkey
+        self.save_config()
+        
+        # Re-register hotkeys
+        self.setup_hotkey_listener()
 
     def on_rapid_toggled(self, checked):
         state.use_rapidocr = checked
@@ -1766,6 +1820,17 @@ class OCRWindow(QMainWindow):
                 slider.blockSignals(False)
                 spinbox.blockSignals(False)
         
+        # Update hotkeys widgets
+        hotkeys = self.config.get("hotkeys", {})
+        for key in ["extract", "replay", "detect"]:
+            widget_key = f"hotkeys.{key}"
+            if widget_key in self._config_widgets:
+                _, _, btn = self._config_widgets[widget_key]
+                if btn:
+                    val = hotkeys.get(key, "")
+                    btn.current_hotkey = val
+                    btn.setText(btn.format_hotkey(val))
+        
         # Update TTS widgets
         tts_config = self.config.get("tts", {})
         if hasattr(self, 'voice_combo') and self.voice_combo:
@@ -1847,39 +1912,58 @@ class OCRWindow(QMainWindow):
             print(f"Error saving profile '{active_name}': {e}")
 
     def setup_hotkey_listener(self):
-        """Setup global hotkey listener in background thread"""
+        """Setup global hotkey listener"""
         if not KEYBOARD_AVAILABLE:
             print("[Hotkey] Keyboard module not available. Hotkey disabled.")
             return
 
-        def listen():
-            try:
-                # Z = Capture + Detect + Extract + Copy
-                keyboard.add_hotkey("ctrl+shift+alt+z", lambda: self.trigger_hotkey(mode="extract"))
-                # X = Capture + Detect Only (Preview)
-                keyboard.add_hotkey("ctrl+shift+alt+x", lambda: self.trigger_hotkey(mode="detect"))
-                print("[Hotkey] Registered Ctrl+Shift+Alt+Z (Extract) and Ctrl+Shift+Alt+X (Detect)")
-                keyboard.wait()
-            except Exception as e:
-                print(f"[Hotkey] Error: {e}")
+        # Unhook all existing hotkeys first to avoid duplicates/conflicts
+        try:
+            keyboard.unhook_all()
+        except Exception:
+            pass
 
-        t = threading.Thread(target=listen, daemon=True)
-        t.start()
+        hotkeys = self.config.get("hotkeys", {
+            "extract": "ctrl+shift+alt+z",
+            "replay": "ctrl+shift+alt+x",
+            "detect": "ctrl+shift+alt+m"
+        })
+
+        def register():
+            try:
+                # Extract
+                hk_extract = hotkeys.get("extract", "ctrl+shift+alt+z")
+                keyboard.add_hotkey(hk_extract, lambda: self.trigger_hotkey(mode="extract"))
+                
+                # Replay
+                hk_replay = hotkeys.get("replay", "ctrl+shift+alt+x")
+                keyboard.add_hotkey(hk_replay, lambda: self.trigger_hotkey(mode="replay"))
+                
+                # Detect
+                hk_detect = hotkeys.get("detect", "ctrl+shift+alt+m")
+                keyboard.add_hotkey(hk_detect, lambda: self.trigger_hotkey(mode="detect"))
+                
+                print(f"[Hotkey] Registered: Extract={hk_extract}, Replay={hk_replay}, Detect={hk_detect}")
+            except Exception as e:
+                print(f"[Hotkey] Error registering keys: {e}")
+
+        # Register immediately (keyboard lib handles its own threading/hooks)
+        register()
 
     def trigger_hotkey(self, mode="extract"):
         """Called when hotkey is pressed (runs in background thread)"""
         print(f"[Hotkey] Triggered: mode={mode}")
-        # Play acknowledgment beep immediately - call directly since we're already in a thread
+        # Play acknowledgment beep immediately
         try:
             self.play_beep("success")
-            print("[Hotkey] Beep called")
-        except Exception as e:
-            print(f"[Hotkey] Error calling beep: {e}")
-            import traceback
-            traceback.print_exc()
+        except Exception:
+            pass
+            
         # Use QTimer to safely call GUI method from background thread
         if mode == "extract":
             QTimer.singleShot(0, self.run_capture_and_extract)
+        elif mode == "replay":
+            QTimer.singleShot(0, self.replay_audio)
         else:
             QTimer.singleShot(0, self.run_capture_and_detect)
 
@@ -2037,7 +2121,7 @@ class OCRWindow(QMainWindow):
         
         # 2. Local Sorting
         sort_config = self.config.get("text_sorting", {})
-        direction = sort_config.get("direction", "horizontal_ltr")
+        direction = sort_config.get("direction") or "horizontal_ltr"
         group_tol = sort_config.get("group_tolerance", 0.5)
         
         sorted_regions = sort_text_regions_by_reading_order(
@@ -2661,6 +2745,8 @@ class OCRWindow(QMainWindow):
             self.profile_group.setTitle(t["profile_group"])
         if hasattr(self, 'selection_group'):
             self.selection_group.setTitle(t["selection_group"])
+        if hasattr(self, 'hotkeys_group'):
+            self.hotkeys_group.setTitle(t["hotkeys_group"])
         if hasattr(self, 'image_settings_group'):
             self.image_settings_group.setTitle(t["img_adj_group"])
         if hasattr(self, 'text_processing_group'):

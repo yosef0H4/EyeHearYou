@@ -1,7 +1,8 @@
 """Custom widgets for the OCR GUI"""
-from PyQt6.QtWidgets import QWidget, QGraphicsRectItem, QGraphicsTextItem, QGraphicsItem
-from PyQt6.QtCore import Qt, QRect, QRectF
+from PyQt6.QtWidgets import QWidget, QGraphicsRectItem, QGraphicsTextItem, QGraphicsItem, QPushButton
+from PyQt6.QtCore import Qt, QRect, QRectF, pyqtSignal, QThread
 from PyQt6.QtGui import QPainter, QPen, QColor, QBrush, QFont, QPixmap
+from src.frontend.constants import KEYBOARD_AVAILABLE, keyboard
 
 
 class DetectionVizWidget(QWidget):
@@ -214,6 +215,70 @@ class ManualBoxItem(QGraphicsRectItem):
         """Hide delete button when not hovering"""
         self.delete_btn.setVisible(False)
         super().hoverLeaveEvent(event)
+
+
+class HotkeyRecorder(QPushButton):
+    """
+    Button that records a hotkey when clicked.
+    """
+    hotkeyChanged = pyqtSignal(str, str)  # key_type, new_hotkey
+
+    def __init__(self, key_type, current_hotkey, parent=None):
+        super().__init__(parent)
+        self.key_type = key_type
+        self.current_hotkey = current_hotkey
+        self.setText(self.format_hotkey(current_hotkey))
+        self.setCheckable(True)
+        self.clicked.connect(self.start_recording)
+        self.setStyleSheet("""
+            QPushButton {
+                text-align: left;
+                padding: 5px;
+                background-color: #2d2d30;
+                border: 1px solid #3e3e42;
+            }
+            QPushButton:checked {
+                background-color: #007acc;
+                color: white;
+            }
+        """)
+
+    def format_hotkey(self, hotkey):
+        return f"{self.key_type.title()}: {hotkey}"
+
+    def start_recording(self):
+        self.setText("Press combination... (Esc to cancel)")
+        self.setChecked(True)
+        
+        # Start recording in background thread
+        self.thread = HotkeyRecordThread()
+        self.thread.recorded.connect(self.finish_recording)
+        self.thread.start()
+
+    def finish_recording(self, hotkey):
+        if hotkey and hotkey != "esc":
+            self.current_hotkey = hotkey
+            self.hotkeyChanged.emit(self.key_type, hotkey)
+        
+        self.setText(self.format_hotkey(self.current_hotkey))
+        self.setChecked(False)
+
+
+class HotkeyRecordThread(QThread):
+    """Background thread to record a single hotkey"""
+    recorded = pyqtSignal(str)
+
+    def run(self):
+        try:
+            if KEYBOARD_AVAILABLE:
+                # read_hotkey blocks until a key combo is pressed
+                hotkey = keyboard.read_hotkey(suppress=False)
+                self.recorded.emit(hotkey)
+            else:
+                self.recorded.emit(None)
+        except Exception as e:
+            print(f"Error recording hotkey: {e}")
+            self.recorded.emit(None)
 
 
 class UnifiedSettingsViz(QWidget):
