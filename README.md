@@ -4,43 +4,44 @@ A Python application that reads text aloud from your screen. Press `Ctrl+Shift+A
 
 ## Features
 
-- **One-Key Reading**: Press `Ctrl+Shift+Alt+Z` to automatically capture, detect, extract, and read text aloud
-- **Text-to-Speech**: Always enabled - automatically reads extracted text using Kokoro TTS (82M parameter, Apache-licensed model)
-- **Desktop GUI**: Visual interface to fine-tune detection and merge settings with live preview
-- **Backend-Authoritative**: All detection/merging logic runs in Python for consistency between preview and extraction
-- **Smart Text Detection**: Uses RapidOCR to detect text regions, then processes only cropped regions with the local H2OVL model (faster and more accurate)
-- **Auto-Merge Dialogue**: Automatically merges split dialogue lines with configurable tolerances
-- **CPU-Based Detection**: RapidOCR runs on CPU via ONNX Runtime (no GPU conflicts with PyTorch)
-- **Local AI Model**: Uses H2OVL-Mississippi-0.8B running locally - no API keys or internet required
-- **Real-Time Preview**: See detection boxes and merged regions update live as you adjust settings
-- **Auto-Refresh UI**: UI automatically reflects results when using hotkey - no manual button presses needed
+- **One-Key Reading**: Press `Ctrl+Shift+Alt+Z` to automatically capture, detect, extract, and read text aloud.
+- **Smart & Manual Selection**:
+  - **Smart Detection**: Uses RapidOCR to automatically find text on screen (toggleable).
+  - **Manual Boxes**: Draw permanent boxes over fixed areas (like dialogue boxes in Visual Novels). These persist across screenshots, adapt to window resizing, and are saved to config.
+  - **Area Selection**: "Photoshop-style" Add/Subtract selection tools to precisely define where to look (or what to ignore). Uses normalized coordinates for resolution independence.
+- **Text-to-Speech**: Always enabled - automatically reads extracted text using Kokoro TTS (82M parameter, Apache-licensed model).
+- **Local AI Model**: Uses H2OVL-Mississippi-0.8B running locally for high-accuracy text extraction (no internet required).
+- **Auto-Merge Dialogue**: Intelligent merging of split sentences and paragraphs using adaptive logic that works across all screen sizes.
+- **Real-Time Preview**: Native PyQt6 GUI with instant visual feedback for tuning detection settings.
+- **Resolution Independent**: Manual boxes and selection areas use normalized coordinates (0-1), so they work correctly even if you resize the game window or change resolution.
+- **Contained Box Filtering**: Automatically removes smaller boxes that are mostly inside larger manual boxes (keeps the container, discards the inner ones).
+- **Loading Screen**: Shows progress bar during model warm-up on startup.
 
 ## Requirements
 
 - Python 3.12+
-- `uv` package manager
+- `uv` package manager (recommended) or standard pip.
+- **Hardware**: NVIDIA GPU (6GB+ VRAM) recommended for speed, but runs on CPU (slower).
 
 ## Installation
 
-1. **Install `uv`** if you haven't already:
+1. **Install `uv`** (Fast Python package installer):
    ```bash
    curl -LsSf https://astral.sh/uv/install.sh | sh
    ```
-   (Windows: `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`)
+   (Windows PowerShell: `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`)
 
-2. **Install all dependencies** using the installation script:
+2. **Install Dependencies**:
+   Run the automated install script to detect your hardware and install the correct versions of PyTorch, Flash Attention, and models:
 
-   The installation script automatically detects your system and installs the appropriate dependencies:
    ```bash
    uv run python install.py
    ```
    
-   Or specify GPU or CPU explicitly:
-   ```bash
-   uv run python install.py --gpu    # Force GPU installation
-   uv run python install.py --cpu    # Force CPU-only installation
-   ```
-   
+   *Options:*
+   - `uv run python install.py --gpu` (Force GPU installation)
+   - `uv run python install.py --cpu` (Force CPU-only installation)
+
    **What gets installed:**
    - Base dependencies from `pyproject.toml` (including opencv-python for RapidOCR)
    - PyTorch 2.8.0 (GPU with CUDA 12.9, or CPU version)
@@ -49,168 +50,133 @@ A Python application that reads text aloud from your screen. Press `Ctrl+Shift+A
    - Kokoro TTS dependencies (kokoro, misaki[en], loguru, soundfile, sounddevice)
    - Spacy model (en-core-web-sm) for Kokoro TTS
    - RapidOCR (CPU via ONNX Runtime, for text detection)
-   
-   **Requirements for GPU installation**: NVIDIA GPU with CUDA 12.9 support
-   
-   **Note**: The GPU installation is optional but recommended. The model runs on CPU by default but is significantly faster with a GPU. TTS works on both CPU and GPU.
-   
-   **Important**: PyTorch 2.8.0 does NOT require the torchvision patch (unlike 2.7.0). If you're using an older version (PyTorch 2.7.0), you can enable the patch by setting the environment variable `TORCHVISION_PATCH=1`.
-   
-   **Features of the install script:**
-   - Auto-detects GPU availability (or use `--gpu`/`--cpu` flags)
-   - Uses Hugging Face Hub with XET support for efficient Flash Attention downloads
-   - Real-time progress output for all installation steps
-   - Automatic verification of all installed components
-   - Handles dependency conflicts automatically
-
-## Configuration
-
-The application creates a `config.json` file automatically. You can edit this file or use the GUI to adjust settings.
-
-```json
-{
-    "max_image_dimension": 1080,
-    "preprocessing": {
-        "binary_threshold": 0,
-        "invert": false,
-        "dilation": 0,
-        "contrast": 1.0,
-        "brightness": 0
-    },
-    "text_detection": {
-        "min_height_ratio": 0.01,
-        "median_height_fraction": 0.4,
-        "merge_vertical_ratio": 0.5,
-        "merge_horizontal_ratio": 1.5,
-        "merge_width_ratio_threshold": 0.3
-    },
-    "tts": {
-        "voice": "af_heart",
-        "speed": 1.0
-    }
-}
-```
-
-### Settings Guide:
-- **max_image_dimension**: Downscales large images to fit model context (default: 1080)
-- **preprocessing**: Image adjustments before detection (useful for difficult backgrounds)
-- **text_detection**: Controls how text is detected and merged into lines (uses adaptive ratios that work across all screen sizes)
-  - **min_height_ratio**: Minimum height as fraction of screen height (default: 0.01 = 1%)
-  - **median_height_fraction**: Discard boxes smaller than this fraction of median text size (default: 0.4 = 40%, removes noise)
-  - **merge_vertical_ratio**: Vertical gap multiplier for merging lines (default: 0.5 = half a line height)
-  - **merge_horizontal_ratio**: Horizontal gap multiplier for merging words (default: 1.5 = 1.5x line height)
-  - **merge_width_ratio_threshold**: Minimum horizontal overlap for vertical merging (default: 0.3)
-- **tts**: Text-to-Speech settings (TTS is always enabled)
-  - **voice**: Kokoro voice ID (default: "af_heart")
-  - **speed**: Speech speed multiplier (default: 1.0, range: 0.5-2.0)
 
 ## Quick Start
 
-### Desktop GUI (Recommended)
+1. **Run the GUI**:
+   ```bash
+   uv run python run_gui.py
+   ```
 
-The PyQt6 GUI provides instant feedback, real progress bars, and zero latency:
+2. **Wait for Models to Load**: A loading screen will show progress as models warm up (first run may take a minute to download models).
 
-```bash
-uv run python run_gui.py
-```
+3. **Capture**:
+   - Switch to your game or application.
+   - Press **`Ctrl+Shift+Alt+Z`** (Extract + Read) or **`Ctrl+Shift+Alt+X`** (Detect Only).
+   - The tool captures the window, extracts text, and starts reading immediately.
 
-**Press `Ctrl+Shift+Alt+Z`** anywhere on your screen - that's it! Text is automatically:
-- Captured from the active window
-- Detected using RapidOCR
-- Merged into complete dialogue lines
-- Extracted using AI
-- **Read aloud using Kokoro TTS** (always enabled)
+4. **Tune (Optional)**:
+   - Switch back to the GUI to see the preview.
+   - Use the **Selection Tools** to refine exactly what text is read.
 
-The UI automatically updates to show detection boxes and extracted text. You only need to use the UI buttons if you want to tune settings for better detection.
+## Selection Tools Guide
 
-**Features:**
-- **Instant Updates**: No server round-trips, everything happens in the same process
-- **Real Progress Bars**: See exactly what's happening (detection, merging, OCR)
-- **Working Cancellation**: Cancel button actually stops the process immediately
-- **Native Performance**: Drawing boxes and updating UI is instant
-- **Hotkey Support**: Press `Ctrl+Shift+Alt+Z` anywhere to capture
+The GUI provides powerful tools to control exactly what text is processed.
 
-## Usage
+### Toolbar Modes
+- **✋ View**: Pan and zoom the image preview.
+- **➕ Add Area**: Draw a rectangle to *include* this area for Smart Detection. (By default, the whole image is included).
+- **➖ Remove Area**: Draw a rectangle to *exclude* text in this area (e.g., to ignore a chat window, UI elements, or subtitles).
+- **📦 Manual Box**: Draw a **permanent** box.
+  - **Usage**: Perfect for Visual Novels where the text box is always in the same place.
+  - **Behavior**: These boxes **persist** even if you close the app. They use normalized coordinates (0-1), so they stay correct even if you resize the game window or change resolution.
+  - **Editing**: Hover over a manual box and click the red **×** to delete it.
+  - **Clear All**: Use the "Clear Manual" button to remove all manual boxes at once.
 
-### Desktop GUI (Recommended)
+### Actions
+- **Select All**: Reset to default state (everything selected).
+- **Deselect All**: Clear all selections (nothing selected).
+- **Clear Manual**: Remove all manually drawn boxes.
 
-The PyQt6 GUI is the best option for local use - it's faster, more responsive, and has working progress bars:
+### Workflow Examples
 
-```bash
-uv run python run_gui.py
-```
+**Scenario A: Standard Visual Novel (Fixed Text Box)**
+1. Uncheck "Use Smart Detection (RapidOCR)".
+2. Select **📦 Manual Box**.
+3. Draw a box over the dialogue area.
+4. Done! Now every time you press the hotkey, it only reads that specific area. The box persists across sessions and adapts to window resizing.
 
-**Why use the GUI:**
-- ✅ **Zero latency** - no HTTP requests, everything is instant
-- ✅ **Real progress bars** - see exactly what's happening
-- ✅ **Working cancellation** - cancel button actually stops processes
-- ✅ **Better performance** - native drawing is faster than HTML overlays
-- ✅ **Simpler architecture** - no server, no SSE, no state sync issues
+**Scenario B: RPG with Dynamic Text bubbles**
+1. Check "Use Smart Detection (RapidOCR)".
+2. If the tool is reading UI numbers (HP/MP) you don't want:
+   - Select **➖ Remove Area**.
+   - Draw boxes over the HP/MP bars.
+3. Now the tool will detect text *everywhere* except those specific spots.
 
-**Features:**
-- Live preview with bounding boxes drawn directly on the image
-- Real-time progress updates during detection and OCR
-- Cancel button that actually works
-- All settings auto-save to `config.json`
-- Hotkey support: Press `Ctrl+Shift+Alt+Z` anywhere
+**Scenario C: Mixed Mode (Smart Detection + Manual Safety Net)**
+1. Check "Use Smart Detection (RapidOCR)".
+2. Draw a **📦 Manual Box** over the dialogue area as a backup.
+3. If RapidOCR misses the dialogue, the manual box will catch it.
+4. The contained box filter automatically removes RapidOCR detections that are inside your manual box (keeps the larger manual box).
 
-**Workflow:**
-1. **Quick Start**: Just press `Ctrl+Shift+Alt+Z` anywhere on your screen - text is automatically extracted and read aloud!
-2. **Tune Settings** (optional): Use the UI to adjust detection sensitivity, merge tolerances, and TTS speed
-   - Red boxes show detected text regions
-   - Blue boxes show merged dialogue lines
-   - TTS panel: Adjust speech speed (TTS is always enabled)
-   - Adjust sliders to fine-tune for your content
-3. **Manual Mode** (optional): Click "New Screenshot" and "Run Detection" if you want to manually test settings
-4. The UI automatically shows results from hotkey captures - no need to press buttons unless re-tuning settings
+## Configuration Settings
 
-### Standalone CLI (No UI)
+Settings are saved to `config.json`. Key parameters:
 
-For headless operation without the GUI:
+- **max_image_dimension**: Downscales huge screenshots to save memory (Default: 1080).
+- **preprocessing**: Adjusts image contrast/brightness before OCR (useful for transparent text boxes).
+  - *binary_threshold*: Binarization threshold (0-255, 0=disabled)
+  - *invert*: Invert colors (useful for dark text on light backgrounds)
+  - *dilation*: Thicken text (0-5, useful for thin fonts)
+  - *contrast*: Contrast multiplier (0.5-3.0)
+  - *brightness*: Brightness adjustment (-100 to 100)
+- **text_detection**:
+  - *min_height_ratio*: Filters out tiny text as fraction of screen height (default: 0.031 = 3.1%).
+  - *min_width_ratio*: Minimum width as fraction of screen width (default: 0.0 = disabled).
+  - *median_height_fraction*: Discard boxes smaller than this fraction of median text size (default: 1.0 = 100%, less aggressive noise filtering).
+  - *merge_vertical_ratio*: Vertical gap as multiplier of text height for merging lines (default: 0.07 = tight vertical merging).
+  - *merge_horizontal_ratio*: Horizontal gap as multiplier of text height for merging words (default: 0.37 = tight horizontal merging).
+  - *merge_width_ratio_threshold*: Minimum horizontal overlap ratio for vertical merging (default: 0.75).
+- **text_sorting**:
+  - *direction*: Reading order ("horizontal_ltr", "horizontal_rtl", "vertical_ltr", "vertical_rtl").
+  - *group_tolerance*: Line grouping tolerance multiplier (default: 0.5).
+- **tts**:
+  - *speed*: Speech speed multiplier (0.5-2.0, default: 1.0).
+  - *voice*: Kokoro voice ID (default: "af_heart").
+- **manual_boxes**: Automatically saved list of manual boxes in normalized coordinates (persists across sessions).
 
-```bash
-uv run python -m src.backend.cli
-```
+## Hotkeys
 
-This runs the same hotkey functionality but prints results to console instead of updating a UI. Text is still automatically read aloud. Useful when you don't need the visual interface.
+- **`Ctrl+Shift+Alt+Z`**: Capture screenshot, detect text, extract text, and read aloud (full extraction).
+- **`Ctrl+Shift+Alt+X`**: Capture screenshot and detect text only (preview mode, no extraction).
 
-**Note**: The desktop GUI mode (`run_gui.py`) is recommended as it provides visual feedback and allows you to tune settings easily.
+## Testing
 
-## Architecture
+Test scripts are available to verify installation:
 
-- **Backend-Authoritative**: All detection and merging logic runs in Python for consistency
-- **Native GUI**: PyQt6 desktop application with instant updates and real progress tracking
-- **Cached Detections**: Detection results are cached per screenshot version for fast preview updates
-- **Live Preview**: Size filters are applied after RapidOCR runs, enabling instant preview updates without re-running detection
+- **Test OCR Model**: `python test_ocr_model.py`
+  - Tests H2OVL model on `test.png`
+  - Shows CUDA version, PyTorch version, and Flash Attention status
+  - Displays extracted text from test image
 
-## Notes
-
-- **Windows**: The `keyboard` library requires administrator privileges for global hotkeys
-- **Screenshot**: Captures only the active window (not the full screen)
-- **Local Processing**: All OCR processing happens locally - no internet connection or API keys required
-- **Accessibility Focus**: This tool is designed to help users who cannot read text on screen - text is always read aloud automatically
+- **Test TTS**: `python test_kokoro_tts.py`
+  - Tests Kokoro TTS installation
+  - Generates and plays test audio
 
 ## Troubleshooting
 
-### Hotkey not working
-- On Windows, run as administrator
-- Make sure no other application is using the same hotkey
+- **Hotkey not working?** Run the terminal/command prompt as Administrator (Windows restriction).
+- **Slow performance?** Ensure you installed with `--gpu` and have CUDA installed. CPU mode works but takes 2-5 seconds per capture.
+- **Manual Boxes disappeared?** They are saved in `config.json` under `manual_boxes`. If you deleted the config file, they are reset.
+- **Text box selected but not reading?** Check the "Preprocessing" tab. Try increasing "Contrast" or using "Binary Threshold" if the text blends into the background.
+- **Loading screen stuck?** First run downloads models (~1.6GB H2OVL + ~300MB Kokoro). Check your internet connection and disk space.
+- **Flash Attention warnings?** These are informational - the model will use SDPA fallback if Flash Attention isn't available. GPU performance may be slower without Flash Attention.
 
-### Model loading is slow
-- The first run downloads the H2OVL model (~1.6GB) and Kokoro TTS model (~300MB) and may take time
-- CPU inference is slower than GPU; consider installing CUDA support if you have an NVIDIA card
-- TTS model loads on first use - subsequent uses are faster
+## Architecture
 
-### TTS not working
-- TTS is always enabled - check console for TTS messages - first load may take a minute
-- Verify Kokoro is installed: `uv pip list | grep kokoro`
-- If you're using PyTorch 2.7.0 and see torchvision errors, enable the patch: `set TORCHVISION_PATCH=1` (Windows) or `export TORCHVISION_PATCH=1` (Linux/Mac) before running
+- **Frontend**: PyQt6 (Native Desktop GUI) for zero-latency interactions.
+- **Backend**: 
+  - **RapidOCR (ONNX)**: CPU-optimized initial text detection.
+  - **H2OVL-Mississippi (PyTorch)**: Vision-Language Model for accurate text recognition.
+  - **Kokoro (ONNX/PyTorch)**: High-quality offline Text-to-Speech.
+- **State Management**: Centralized state with normalized coordinates for resolution-independent selections.
+- **Worker Threads**: OCR and TTS run in background threads to keep UI responsive.
+- **Caching**: Detection results are cached per screenshot version for fast preview updates.
 
-### Import errors
-- Make sure you're using the virtual environment: `uv run python run_gui.py` or `uv run python run_cli.py`
-- Or activate the venv: `.venv\Scripts\activate` (Windows) or `source .venv/bin/activate` (Linux/Mac)
+## Notes
 
-### RapidOCR issues
-- RapidOCR runs on CPU via ONNX Runtime - no GPU configuration needed
-- RapidOCR is required - install it with: `uv pip install rapidocr-onnxruntime`
-- Verify installation: `python -c "from rapidocr_onnxruntime import RapidOCR; print('RapidOCR installed successfully')"`
+- **Windows**: The `keyboard` library requires administrator privileges for global hotkeys.
+- **Screenshot**: Captures only the active window (not the full screen).
+- **Local Processing**: All OCR processing happens locally - no internet connection or API keys required (except for initial model downloads).
+- **Accessibility Focus**: This tool is designed to help users who cannot read text on screen - text is always read aloud automatically.
+- **Normalized Coordinates**: Manual boxes and selections use 0-1 coordinates, making them work across different resolutions and aspect ratios.
