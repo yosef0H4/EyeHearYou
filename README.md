@@ -59,6 +59,7 @@ A Python application that reads text aloud from your screen. Press `Ctrl+Shift+A
    - H2OVL-Mississippi dependencies (transformers, accelerate, timm, peft)
    - Kokoro TTS dependencies (kokoro, misaki[en], loguru, soundfile, sounddevice)
    - Spacy model (en-core-web-sm) for Kokoro TTS
+   - Default voice (af_heart) pre-downloaded and cached for offline use
    - RapidOCR (CPU via ONNX Runtime, for text detection)
    
    **⚠️ CPU Installation Warning:**

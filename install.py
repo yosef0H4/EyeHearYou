@@ -233,12 +233,13 @@ def install_h2ovl_deps():
 
 
 def install_kokoro_tts():
-    """Install Kokoro TTS dependencies"""
+    """Install Kokoro TTS dependencies and pre-download default voice"""
     print("\n" + "="*60)
     print("[4/5] Installing Kokoro TTS dependencies...")
     print("="*60)
     print("NOTE: Installing kokoro, misaki[en], loguru, soundfile, and sounddevice")
     print("      These require torch, so they must be installed after PyTorch.")
+    print("      Will also pre-download default voice (af_heart) for offline use.")
     
     # Install kokoro and its dependencies with exact versions
     # misaki[en] includes spacy, spacy-curated-transformers, espeakng-loader, num2words, phonemizer-fork
@@ -261,7 +262,51 @@ def install_kokoro_tts():
     if not result:
         print("WARNING: Failed to pre-install spacy model - it will be downloaded on first use")
     
+    # Pre-download default voice to avoid runtime download (works offline after install)
+    print("\n[4c/5] Pre-downloading default voice (af_heart) to avoid runtime download...")
+    print("NOTE: This voice file will be cached so the program works offline")
+    if not preload_default_voice():
+        print("WARNING: Failed to pre-download default voice - it will be downloaded on first use")
+    
     return True
+
+
+def preload_default_voice():
+    """Pre-download the default voice (af_heart) from HuggingFace"""
+    try:
+        # Use uv run python to ensure we're in the correct environment
+        preload_script = """
+import sys
+try:
+    from huggingface_hub import hf_hub_download
+    repo_id = 'hexgrad/Kokoro-82M'
+    voice_file = 'voices/af_heart.pt'
+    print(f"Downloading default voice from {repo_id}...")
+    print(f"Voice file: {voice_file}")
+    print("(This will be cached for offline use)")
+    downloaded_path = hf_hub_download(
+        repo_id=repo_id,
+        filename=voice_file,
+        repo_type='model',
+        force_download=False  # Use cache if available
+    )
+    print(f"✓ Default voice downloaded and cached: {downloaded_path}")
+    sys.exit(0)
+except ImportError:
+    print("ERROR: huggingface-hub not available")
+    sys.exit(1)
+except Exception as e:
+    print(f"ERROR: Failed to download default voice: {e}")
+    import traceback
+    traceback.print_exc()
+    sys.exit(1)
+"""
+        cmd = ["uv", "run", "python", "-c", preload_script]
+        result = run_command(cmd, check=False)
+        return result
+    except Exception as e:
+        print(f"ERROR: Exception while pre-downloading voice: {e}")
+        return False
 
 
 def install_rapidocr():
