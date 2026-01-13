@@ -3,6 +3,9 @@ import json
 import threading
 from typing import Optional, List, Tuple
 
+import sounddevice as sd
+import numpy as np
+
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QSlider, QGroupBox, QPushButton, QTextEdit, QProgressBar,
@@ -1575,6 +1578,72 @@ class OCRWindow(QMainWindow):
         except Exception as e:
             print(f"[TTS] Stop error: {e}")
 
+    def play_beep(self, beep_type="success"):
+        """
+        Play a beep sound to provide audio feedback.
+        
+        Args:
+            beep_type: "success" for acknowledgment beep, "error" for error beep
+        """
+        print(f"[Beep] play_beep called: type={beep_type}")
+        def _play_beep_thread():
+            """Play beep in a separate thread to avoid blocking"""
+            try:
+                # Get volume from TTS config (same as TTS volume)
+                volume = self.config.get("tts", {}).get("volume", 1.0)
+                print(f"[Beep] Thread started: Playing {beep_type} beep (volume={volume})")
+                
+                # Beep parameters
+                sample_rate = 44100
+                if beep_type == "success":
+                    # Success beep: low pitch, short duration (user will hear this often)
+                    frequency = 250  # Hz (low pitch but audible)
+                    duration = 0.2  # seconds (short but audible)
+                else:  # error
+                    # Error beep: slightly higher pitch, still short
+                    frequency = 400  # Hz
+                    duration = 0.2  # seconds
+                
+                # Generate sine wave
+                t = np.linspace(0, duration, int(sample_rate * duration), False)
+                # Apply envelope to avoid clicks (fade in/out)
+                envelope = np.ones_like(t)
+                fade_samples = int(sample_rate * 0.02)  # 20ms fade
+                if fade_samples > 0 and len(envelope) > fade_samples * 2:
+                    envelope[:fade_samples] = np.linspace(0, 1, fade_samples)
+                    envelope[-fade_samples:] = np.linspace(1, 0, fade_samples)
+                
+                # Generate tone with envelope
+                # Use 0.5 base amplitude (50%) for audible but subtle beep, then apply volume (0.0-2.0)
+                # Ensure volume is at least 0.25 to be audible even at low settings
+                effective_volume = max(0.25, volume) * 0.5
+                tone = np.sin(2 * np.pi * frequency * t) * envelope * effective_volume
+                
+                # Ensure proper format (mono, float32)
+                tone = tone.astype(np.float32)
+                
+                # Check sounddevice is available
+                try:
+                    default_device = sd.query_devices(kind='output')
+                    print(f"[Beep] Using audio device: {default_device['name']}")
+                except Exception as dev_e:
+                    print(f"[Beep] Warning: Could not query audio device: {dev_e}")
+                
+                # Play beep and wait for completion
+                print(f"[Beep] Playing tone: {len(tone)} samples, {duration:.2f}s, {frequency}Hz, volume={effective_volume:.2f}")
+                sd.play(tone, sample_rate)
+                sd.wait()  # Wait until playback is finished
+                print(f"[Beep] ✓ {beep_type} beep completed")
+            except Exception as e:
+                print(f"[Beep] ✗ Error playing beep: {e}")
+                import traceback
+                traceback.print_exc()
+        
+        # Play beep in a separate thread to avoid blocking the UI
+        beep_thread = threading.Thread(target=_play_beep_thread, daemon=True, name=f"BeepThread-{beep_type}")
+        beep_thread.start()
+        print(f"[Beep] Thread started: {beep_thread.name}")
+
     def save_and_refresh(self):
         """Save config and refresh detection if image exists"""
         self.save_config()
@@ -1799,6 +1868,15 @@ class OCRWindow(QMainWindow):
 
     def trigger_hotkey(self, mode="extract"):
         """Called when hotkey is pressed (runs in background thread)"""
+        print(f"[Hotkey] Triggered: mode={mode}")
+        # Play acknowledgment beep immediately - call directly since we're already in a thread
+        try:
+            self.play_beep("success")
+            print("[Hotkey] Beep called")
+        except Exception as e:
+            print(f"[Hotkey] Error calling beep: {e}")
+            import traceback
+            traceback.print_exc()
         # Use QTimer to safely call GUI method from background thread
         if mode == "extract":
             QTimer.singleShot(0, self.run_capture_and_extract)
@@ -1820,6 +1898,7 @@ class OCRWindow(QMainWindow):
         else:
             self.status_label.setText("Failed to capture screenshot")
             self.progress_bar.setValue(0)
+            self.play_beep("error")
 
     def run_capture_and_detect(self):
         """Capture screenshot and run detection preview (X)"""
@@ -1836,6 +1915,7 @@ class OCRWindow(QMainWindow):
         else:
             self.status_label.setText("Failed to capture screenshot")
             self.progress_bar.setValue(0)
+            self.play_beep("error")
 
     def display_image(self, pil_image):
         """Display PIL image in graphics view"""
@@ -2401,6 +2481,8 @@ class OCRWindow(QMainWindow):
         self.btn_capture.setEnabled(True)
         self.btn_extract.setEnabled(True)
         self.progress_bar.setValue(0)
+        # Play error beep
+        self.play_beep("error")
 
     def fit_image_to_view(self):
         """Fit the image to the view while maintaining aspect ratio"""
