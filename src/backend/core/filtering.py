@@ -279,6 +279,74 @@ def filter_regions_by_mask(regions, mask, threshold=0.1):
     return filtered
 
 
+def filter_contained_boxes(boxes, threshold=0.9):
+    """
+    Remove boxes that are significantly contained within other larger boxes.
+    Useful when a user manually selects a large area that covers auto-detected regions.
+    
+    Args:
+        boxes: List of (x1, y1, x2, y2) tuples
+        threshold: Fraction of the smaller box area that must be covered by the larger box
+                   to consider it "contained" (0.0-1.0). Default 0.9.
+    
+    Returns:
+        List of boxes with contained ones removed.
+    """
+    if not boxes:
+        return []
+        
+    # Calculate areas
+    box_areas = []
+    for b in boxes:
+        w = b[2] - b[0]
+        h = b[3] - b[1]
+        box_areas.append(w * h)
+    
+    keep = [True] * len(boxes)
+    
+    for i in range(len(boxes)):
+        if not keep[i]:
+            continue
+            
+        for j in range(len(boxes)):
+            if i == j or not keep[j]:
+                continue
+            
+            # Check if box[i] is inside box[j] or vice versa
+            # We want to keep the LARGER box
+            
+            # Get intersection
+            x1 = max(boxes[i][0], boxes[j][0])
+            y1 = max(boxes[i][1], boxes[j][1])
+            x2 = min(boxes[i][2], boxes[j][2])
+            y2 = min(boxes[i][3], boxes[j][3])
+            
+            inter_w = max(0, x2 - x1)
+            inter_h = max(0, y2 - y1)
+            inter_area = inter_w * inter_h
+            
+            if inter_area == 0:
+                continue
+                
+            # Check containment
+            # Is i contained in j?
+            if inter_area >= (box_areas[i] * threshold):
+                # i is inside j. 
+                # If j is larger (or equal), discard i.
+                if box_areas[j] >= box_areas[i]:
+                    keep[i] = False
+                    break 
+            
+            # Is j contained in i?
+            elif inter_area >= (box_areas[j] * threshold):
+                # j is inside i.
+                # If i is larger, discard j.
+                if box_areas[i] >= box_areas[j]:
+                    keep[j] = False
+    
+    return [boxes[i] for i in range(len(boxes)) if keep[i]]
+
+
 def get_regions_from_mask(mask):
     """
     Convert white areas in mask to bounding boxes (Manual Mode).

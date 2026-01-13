@@ -67,6 +67,15 @@ class OCRWindow(QMainWindow):
         self.pixmap_item = None  # Store reference to pixmap item
         self.manual_box_items = []  # Keep track of visual items for manual boxes
         
+        # Load manual boxes from config (ensure they persist)
+        if "manual_boxes" in self.config:
+            # Convert lists (from JSON) back to tuples
+            try:
+                loaded_boxes = [tuple(box) for box in self.config["manual_boxes"]]
+                state.manual_boxes = loaded_boxes
+            except Exception:
+                print("Failed to load manual boxes from config")
+        
         # Selection Tool State
         self.tool_mode = "none"  # "none", "add", "sub", "manual"
         self.is_drawing = False
@@ -242,8 +251,13 @@ class OCRWindow(QMainWindow):
         btn_desel_all = QPushButton("Deselect All")
         btn_desel_all.clicked.connect(self.deselect_all)
         
+        btn_clear_manual = QPushButton("Clear Manual")
+        btn_clear_manual.clicked.connect(self.clear_manual_boxes)
+        btn_clear_manual.setStyleSheet("color: #ff9999;")  # Reddish text hint
+        
         actions_layout.addWidget(btn_sel_all)
         actions_layout.addWidget(btn_desel_all)
+        actions_layout.addWidget(btn_clear_manual)
         g_layout.addLayout(actions_layout)
         
         group.setLayout(g_layout)
@@ -272,6 +286,20 @@ class OCRWindow(QMainWindow):
         state.selection_base_state = False
         self.update_selection_overlay()
         self.run_detection_preview()
+
+    def clear_manual_boxes(self):
+        """Clear all manually drawn boxes"""
+        state.manual_boxes = []
+        self.save_manual_boxes()
+        self.draw_manual_boxes()
+        if state.last_image:
+            self.run_detection_preview()
+
+    def save_manual_boxes(self):
+        """Save manual boxes to config file"""
+        # Save as list of lists for JSON compatibility
+        self.config["manual_boxes"] = [list(b) for b in state.manual_boxes]
+        self.save_config()
 
     def update_selection_overlay(self):
         """Draw semi-transparent overlay to indicate selection state"""
@@ -1571,23 +1599,16 @@ class OCRWindow(QMainWindow):
                     
                     if nw > 0.001 and nh > 0.001:  # Min size check
                         if self.tool_mode == "manual":
-                            # Add manual box in pixel coordinates
-                            # rect_f is in scene coordinates, which should match image pixels
-                            # since pixmap is at (0,0) in scene
-                            x1 = max(0, int(rect_f.x()))
-                            y1 = max(0, int(rect_f.y()))
-                            x2 = min(img_w, int(rect_f.x() + rect_f.width()))
-                            y2 = min(img_h, int(rect_f.y() + rect_f.height()))
+                            # Add manual box in NORMALIZED coordinates (x, y, w, h)
+                            box_norm = (nx, ny, nw, nh)
                             
-                            # Ensure valid box
-                            if x2 > x1 and y2 > y1:
-                                box = (x1, y1, x2, y2)
-                                # Avoid duplicates
-                                if box not in state.manual_boxes:
-                                    state.manual_boxes.append(box)
-                                    # Redraw manual boxes immediately
-                                    self.draw_manual_boxes()
-                                    self.run_detection_preview()
+                            # Avoid duplicates
+                            if box_norm not in state.manual_boxes:
+                                state.manual_boxes.append(box_norm)
+                                self.save_manual_boxes()
+                                # Redraw manual boxes immediately
+                                self.draw_manual_boxes()
+                                self.run_detection_preview()
                         else:
                             # Add selection operation
                             op = {
@@ -1618,26 +1639,43 @@ class OCRWindow(QMainWindow):
         if not self.pixmap_item:
             return
             
-        for rect in state.manual_boxes:
-            x1, y1, x2, y2 = rect
-            w, h = x2 - x1, y2 - y1
+        img_w = self.pixmap_item.pixmap().width()
+        img_h = self.pixmap_item.pixmap().height()
+
+        for box_norm in state.manual_boxes:
+            # Validate normalized coordinates (should be 0-1)
+            nx, ny, nw, nh = box_norm
+            # Clamp normalized values to valid range
+            nx = max(0.0, min(1.0, nx))
+            ny = max(0.0, min(1.0, ny))
+            nw = max(0.0, min(1.0 - nx, nw))  # Ensure width doesn't exceed bounds
+            nh = max(0.0, min(1.0 - ny, nh))  # Ensure height doesn't exceed bounds
             
-            item = ManualBoxItem(QRectF(float(x1), float(y1), float(w), float(h)), self.remove_manual_box)
-            self.scene.addItem(item)
-            self.manual_box_items.append(item)
+            # Convert normalized -> pixels for display
+            # This ensures boxes scale correctly with different image sizes/aspect ratios
+            x = nx * img_w
+            y = ny * img_h
+            w = nw * img_w
+            h = nh * img_h
+            
+            # Only draw if box is valid
+            if w > 0 and h > 0:
+                item = ManualBoxItem(QRectF(float(x), float(y), float(w), float(h)), self.remove_manual_box)
+                # Store normalized data on item for easier removal identification
+                item.box_data = box_norm
+                
+                self.scene.addItem(item)
+                self.manual_box_items.append(item)
 
     def remove_manual_box(self, item: ManualBoxItem):
         """Callback to remove a manual box"""
-        # Find rect in state
-        rect = item.rect()
-        x1, y1 = int(rect.x()), int(rect.y())
-        x2, y2 = int(rect.x() + rect.width()), int(rect.y() + rect.height())
-        target = (x1, y1, x2, y2)
+        # Retrieve normalized data attached to item
+        if hasattr(item, 'box_data'):
+            target = item.box_data
+            if target in state.manual_boxes:
+                state.manual_boxes.remove(target)
+                self.save_manual_boxes()
         
-        # Remove from state
-        if target in state.manual_boxes:
-            state.manual_boxes.remove(target)
-            
         # Remove from scene
         if item in self.manual_box_items:
             self.manual_box_items.remove(item)

@@ -9,7 +9,8 @@ from src.backend.core.filtering import (
     sort_text_regions_by_reading_order,
     generate_selection_mask,
     filter_regions_by_mask,
-    get_regions_from_mask
+    get_regions_from_mask,
+    filter_contained_boxes
 )
 from src.backend.core.extraction import crop_text_regions
 from src.backend.core.preprocessing import process_image
@@ -60,6 +61,26 @@ class OCRWorker(QThread):
                 state.selection_base_state
             )
 
+            # Convert manual boxes from normalized to pixels for this image size
+            # Normalized coordinates (0-1) ensure boxes work across different resolutions/aspect ratios
+            manual_pixel_boxes = []
+            for nx, ny, nw, nh in state.manual_boxes:
+                # Convert normalized to pixel coordinates
+                x1 = int(nx * img_width)
+                y1 = int(ny * img_height)
+                x2 = int((nx + nw) * img_width)
+                y2 = int((ny + nh) * img_height)
+                
+                # Clamp to image bounds (handle edge cases from different aspect ratios)
+                x1 = max(0, min(x1, img_width))
+                y1 = max(0, min(y1, img_height))
+                x2 = max(0, min(x2, img_width))
+                y2 = max(0, min(y2, img_height))
+                
+                # Only add if valid box
+                if x2 > x1 and y2 > y1:
+                    manual_pixel_boxes.append((x1, y1, x2, y2))
+
             all_boxes = []
             regions = []
 
@@ -104,11 +125,11 @@ class OCRWorker(QThread):
                 
                 # Always include manual boxes (even when RapidOCR is on)
                 # Manual boxes are user's explicit choice, so add them to results
-                if state.manual_boxes:
+                if manual_pixel_boxes:
                     # Add manual boxes to all_boxes for visualization
-                    all_boxes.extend(state.manual_boxes)
+                    all_boxes.extend(manual_pixel_boxes)
                     # Add to regions (they bypass size filtering since user explicitly selected them)
-                    regions.extend(state.manual_boxes)
+                    regions.extend(manual_pixel_boxes)
             else:
                 # MANUAL MODE (No RapidOCR)
                 # Use manual boxes OR selection mask regions (whichever exists)
@@ -117,9 +138,9 @@ class OCRWorker(QThread):
                 regions = []
                 
                 # Priority 1: Manual boxes (user-drawn boxes)
-                if state.manual_boxes:
-                    all_boxes.extend(state.manual_boxes)
-                    regions.extend(state.manual_boxes)
+                if manual_pixel_boxes:
+                    all_boxes.extend(manual_pixel_boxes)
+                    regions.extend(manual_pixel_boxes)
                 
                 # Priority 2: Selection mask regions (if user selected areas but no manual boxes)
                 # Only use mask if user has made explicit selection operations
@@ -167,13 +188,23 @@ class OCRWorker(QThread):
             if self.is_cancelled:
                 return
 
+            # --- NEW STEP: Filter Contained Boxes ---
+            # If we have mixed Manual and Auto boxes, or overlapping Manual boxes,
+            # we want to keep the larger container box and discard the inner ones.
+            if len(regions) > 1:
+                # Use a high threshold (0.8) so we only remove boxes that are mostly inside others
+                regions = filter_contained_boxes(regions, threshold=0.8)
+
+            if self.is_cancelled:
+                return
+
             # Apply size filter to manual boxes if needed (already done for RapidOCR)
             # Note: For manual boxes, we might want to skip size filtering since user explicitly selected them
             # But for selection mask regions, we should filter
             if not state.use_rapidocr and regions:
                 # Only filter if these are from selection mask, not manual boxes
                 # Manual boxes are user's explicit choice, so don't filter them
-                if not state.manual_boxes:  # These are from selection mask
+                if not manual_pixel_boxes:  # These are from selection mask
                     min_width_ratio = td_config.get("min_width_ratio", 0.0)
                     min_height_ratio = td_config.get("min_height_ratio", 0.0)
                     median_height_fraction = td_config.get("median_height_fraction", 1.0)
