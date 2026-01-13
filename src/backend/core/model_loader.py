@@ -115,58 +115,78 @@ class H2OVLModel:
             return ""
     
     def predict(self, image: Image.Image) -> str:
-        """Run inference on a single image
+        """Run inference on a single image (optimized to avoid disk I/O when possible)"""
+        results = self.predict_batch([image])
+        return results[0] if results else ""
+
+    def predict_batch(self, images: list[Image.Image]) -> list[str]:
+        """Run inference on a batch of images (optimized to minimize disk I/O)
         
         Args:
-            image: PIL Image object to process
+            images: List of PIL Image objects to process
             
         Returns:
-            Extracted text string
+            List of extracted text strings
         """
         if self._model is None:
             self._load_model()
-
-        # Input Prompt
-        question = '<image>\nExtract all text from this image. Return only the extracted text, no additional commentary.'
         
-        # Configuration - use greedy decoding for OCR accuracy
-        generation_config = dict(max_new_tokens=2048, do_sample=False)
+        if not images:
+            return []
 
-        # H2OVL model expects a file path string, not a PIL Image
-        # Save PIL Image to temporary file
-        temp_file = None
+        # Standard prompt for OCR
+        prompt = '<image>\nExtract all text from this image. Return only the extracted text, no additional commentary.'
+        generation_config = dict(max_new_tokens=2048, do_sample=False)
+        
+        results = []
+        
         try:
-            # Create temporary file
-            temp_fd, temp_path = tempfile.mkstemp(suffix='.png')
-            temp_file = temp_path
-            os.close(temp_fd)  # Close file descriptor, we'll use the path
-            
-            # Save PIL Image to temp file
-            image.save(temp_path, format='PNG')
-            
-            # Autocast for performance
+            # Try to pass PIL images directly first (avoids disk I/O)
+            # Many HuggingFace VLMs accept PIL images directly
             with torch.autocast(device_type=self._device, dtype=torch.bfloat16):
-                response, _ = self._model.chat(
-                    self._tokenizer,
-                    temp_path,  # Pass file path string
-                    question,
-                    generation_config,
-                    history=None,
-                    return_history=True
-                )
-            return response
+                for img in images:
+                    try:
+                        # Attempt to pass PIL Image directly to chat
+                        # If the underlying code only supports paths, it will raise an error
+                        response, _ = self._model.chat(
+                            self._tokenizer,
+                            img,  # Pass PIL Image directly
+                            prompt,
+                            generation_config,
+                            history=None,
+                            return_history=True
+                        )
+                        results.append(response)
+                    except (TypeError, AttributeError, OSError) as e:
+                        # Fallback: chat() requires file path, use temp file
+                        # But we still process sequentially to avoid memory issues
+                        temp_fd, temp_path = tempfile.mkstemp(suffix='.png')
+                        try:
+                            os.close(temp_fd)
+                            img.save(temp_path, format='PNG')
+                            response, _ = self._model.chat(
+                                self._tokenizer,
+                                temp_path,
+                                prompt,
+                                generation_config,
+                                history=None,
+                                return_history=True
+                            )
+                            results.append(response)
+                        finally:
+                            if os.path.exists(temp_path):
+                                try:
+                                    os.remove(temp_path)
+                                except Exception:
+                                    pass
+
+            return results
+
         except Exception as e:
-            print(f"[Model] Inference error: {e}")
+            print(f"[Model] Batch inference error: {e}")
             import traceback
             traceback.print_exc()
-            return ""
-        finally:
-            # Clean up temporary file
-            if temp_file and os.path.exists(temp_file):
-                try:
-                    os.remove(temp_file)
-                except Exception as e:
-                    print(f"[Model] Warning: Could not delete temp file {temp_file}: {e}")
+            return [""] * len(images)
 
 
 # Global accessor

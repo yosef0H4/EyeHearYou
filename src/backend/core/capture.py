@@ -1,6 +1,7 @@
 """Screenshot capture functionality"""
 import pygetwindow as gw
-from PIL import ImageGrab
+import mss
+from PIL import Image
 
 
 def capture_screenshot():
@@ -18,9 +19,14 @@ def capture_screenshot():
         width = active_window.width
         height = active_window.height
         
-        # Capture only the active window region
-        bbox = (left, top, left + width, top + height)
-        screenshot = ImageGrab.grab(bbox=bbox)
+        # Capture using MSS (faster than ImageGrab)
+        with mss.mss() as sct:
+            # MSS handles multi-monitor coordinates correctly
+            monitor = {"top": top, "left": left, "width": width, "height": height}
+            sct_img = sct.grab(monitor)
+            
+            # Convert to PIL Image
+            screenshot = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
         
         return screenshot
     except Exception as e:

@@ -9,6 +9,7 @@ dependencies = [
     "numpy==2.4.1",
     "opencv-python==4.11.0.86",  # cv2
     "pillow==12.1.0",
+    "mss==10.0.0",
     "rapidocr-onnxruntime==1.4.4",
     "pygetwindow==0.0.9",
     "pyqt6==6.10.2",

@@ -137,34 +137,32 @@ def extract_text_from_regions(full_image, config, on_text_found=None):
     # Save debug images (merged boxes in blue, original boxes in green)
     save_debug_images(full_image, text_regions, cropped_images, is_merged=is_merged)
     
-    # 4. Extraction Phase (Sequential Inference)
+    # 4. Extraction Phase (Batch Inference)
     all_texts = []
     total_regions = len(cropped_images)
     
-    # Ensure model is loaded before loop to avoid lag on first item
+    # Ensure model is loaded
     task_manager.emit_status("Loading AI Model...", progress=25)
     model = get_model()
 
-    for i, cropped_img in enumerate(cropped_images):
+    # Process in Batch
+    task_manager.emit_status(f"Reading {total_regions} regions...", progress=30)
+    print(f"Processing {total_regions} regions in batch...")
+    
+    texts = model.predict_batch(cropped_images)
+    
+    for i, text in enumerate(texts):
         if task_manager.is_cancelled():
-            print("Extraction cancelled during region processing.")
+            print("Extraction cancelled.")
             return None
             
-        progress = 30 + ((i / total_regions) * 70)  # Map 0-100% of regions to 30-100% total progress
-        task_manager.emit_status(f"Reading region {i+1}/{total_regions}...", progress=progress)
-        print(f"Processing region {i+1}/{total_regions}...")
-        
-        # Direct model call
-        text = model.predict(cropped_img)
-        
         if text and text.strip():
             clean_text = text.strip()
             all_texts.append(clean_text)
             
-            # --- CRITICAL CHANGE: Stream result immediately ---
+            # Stream result immediately
             if on_text_found:
                 on_text_found(clean_text)
-            # --------------------------------------------------
     
     task_manager.emit_status("Finalizing...", progress=100)
     

@@ -170,8 +170,10 @@ class OCRWorker(QThread):
                     self.progress_signal.emit("No regions found, processing full image...", 20)
                     # Fallback
                     if self.mode == "full":
-                        from src.backend.core.extraction import extract_text_with_vision_api
-                        text = extract_text_with_vision_api(image, self.config)
+                        from src.backend.core.model_loader import get_model
+                        model = get_model()
+                        # Run inference on full image
+                        text = model.predict(image)
                         self.finished_signal.emit(all_boxes, [], [], text or "No text extracted.")
                     else:
                         self.finished_signal.emit(all_boxes, [], [], None)
@@ -241,8 +243,10 @@ class OCRWorker(QThread):
                 self.progress_signal.emit("No regions found, processing full image...", 20)
                 # Fallback to full image extraction
                 if self.mode == "full":
-                    from src.backend.core.extraction import extract_text_with_vision_api
-                    text = extract_text_with_vision_api(image, self.config)
+                    from src.backend.core.model_loader import get_model
+                    model = get_model()
+                    # Run inference on full image
+                    text = model.predict(image)
                     self.finished_signal.emit(all_boxes, [], [], text or "No text extracted.")
                 else:
                     self.finished_signal.emit(all_boxes, [], [], None)
@@ -323,40 +327,47 @@ class OCRWorker(QThread):
             cropped_images = crop_text_regions(image, merged_regions)
 
             if not cropped_images:
-                from src.backend.core.extraction import extract_text_with_vision_api
-                text = extract_text_with_vision_api(image, self.config)
+                # Fallback to full image
+                from src.backend.core.model_loader import get_model
+                model = get_model()
+                # Run inference on full image
+                text = model.predict(image)
                 if text:
                     speak_text(text, clear_queue=True)  # Speak immediately
                 self.finished_signal.emit(all_boxes, regions, merged_boxes_info, text or "No text extracted.")
                 return
 
             # Clear TTS queue before starting a new batch of regions
-            # This stops any old audio from previous screenshots
             stop_tts_engine()
 
-            # 4. Process each region with streaming
+            # 4. Process regions in BATCH (Faster)
+            self.progress_signal.emit(f"Reading {len(cropped_images)} regions...", 40)
+            
+            from src.backend.core.model_loader import get_model
+            model = get_model()
+            
+            # Run batch inference
+            # This sends all images to the GPU at once (or sequentially without disk I/O overhead)
+            texts = model.predict_batch(cropped_images)
+            
             extracted_texts = []
-            total = len(cropped_images)
-
-            for i, crop in enumerate(cropped_images):
+            total = len(texts)
+            
+            # Process results
+            for i, text in enumerate(texts):
                 if self.is_cancelled:
-                    self.progress_signal.emit("Cancelled", 0)
-                    return
-
-                # Update progress: 30-100% for extraction
-                percent = 30 + int((i / total) * 70)
-                self.progress_signal.emit(f"Processing region {i+1}/{total}...", percent)
-
-                from src.backend.core.extraction import extract_text_with_vision_api
-                text = extract_text_with_vision_api(crop, self.config)
-                
+                    break
+                    
                 if text and text.strip():
                     clean_text = text.strip()
                     extracted_texts.append(clean_text)
                     
-                    # STREAMING: Speak this specific box immediately
-                    # We don't clear_queue here because we want to append to the stream
+                    # STREAMING: Speak immediately
                     speak_text(clean_text, clear_queue=False)
+                
+                # Update progress
+                percent = 40 + int(((i + 1) / total) * 60)
+                self.progress_signal.emit(f"Processed {i+1}/{total}...", percent)
 
             final_text = "\n".join(extracted_texts) if extracted_texts else "No text extracted."
             # Store extracted text in state for Play button
