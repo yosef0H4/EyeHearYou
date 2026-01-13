@@ -60,7 +60,8 @@ A Python application that reads text aloud from your screen. Press `Ctrl+Shift+A
    - Kokoro TTS dependencies (kokoro, misaki[en], loguru, soundfile, sounddevice)
    - Spacy model (en-core-web-sm) for Kokoro TTS
    - Default voice (af_heart) pre-downloaded and cached for offline use
-   - RapidOCR (CPU via ONNX Runtime, for text detection)
+   - RapidOCR (ONNX Runtime, for text detection - CPU or GPU)
+  - onnxruntime-gpu (optional, auto-installed if GPU detected - provides ~27% faster detection)
    
    **⚠️ CPU Installation Warning:**
    - The installer will warn you if no CUDA is detected
@@ -180,6 +181,7 @@ Settings are saved per profile in `profiles.json` (or use the embedded Default p
   - *contrast*: Contrast multiplier (0.5-3.0)
   - *brightness*: Brightness adjustment (-100 to 100)
 - **text_detection**:
+  - *use_gpu*: Enable GPU acceleration for RapidOCR (default: auto-detected on first run - True if GPU available, False otherwise). Can be toggled in GUI.
   - *min_height_ratio*: Filters out tiny text as fraction of screen height (default: 0.031 = 3.1%).
   - *min_width_ratio*: Minimum width as fraction of screen width (default: 0.0 = disabled).
   - *median_height_fraction*: Discard boxes smaller than this fraction of median text size (default: 1.0 = 100%, less aggressive noise filtering).
@@ -231,7 +233,7 @@ Test scripts are available to verify installation:
 
 - **Frontend**: PyQt6 (Native Desktop GUI) for zero-latency interactions.
 - **Backend**: 
-  - **RapidOCR (ONNX)**: CPU-optimized initial text detection.
+  - **RapidOCR (ONNX)**: Initial text detection (CPU or GPU-accelerated if onnxruntime-gpu is installed).
   - **H2OVL-Mississippi (PyTorch)**: Vision-Language Model for accurate text recognition.
   - **Kokoro (ONNX/PyTorch)**: High-quality offline Text-to-Speech.
 - **State Management**: Centralized state with normalized coordinates for resolution-independent selections.

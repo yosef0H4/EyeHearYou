@@ -310,14 +310,29 @@ except Exception as e:
         return False
 
 
-def install_rapidocr():
-    """Install RapidOCR"""
+def install_rapidocr(use_gpu=False):
+    """Install RapidOCR and optionally onnxruntime-gpu for GPU acceleration"""
     print("\n" + "="*60)
-    print("[5/5] Installing RapidOCR (CPU via ONNX Runtime)...")
+    print("[5/5] Installing RapidOCR...")
     print("="*60)
     
+    # Always install rapidocr-onnxruntime
     cmd = ["uv", "pip", "install", "rapidocr-onnxruntime"]
-    return run_command(cmd)
+    success = run_command(cmd)
+    
+    # Optionally install onnxruntime-gpu if GPU is available
+    if use_gpu:
+        print("\n[5b/5] Installing onnxruntime-gpu for GPU acceleration...")
+        print("NOTE: This enables GPU acceleration for RapidOCR (~27% faster detection)")
+        cmd_gpu = ["uv", "pip", "install", "onnxruntime-gpu"]
+        gpu_success = run_command(cmd_gpu, check=False)  # Don't fail if GPU install fails
+        if not gpu_success:
+            print("WARNING: Failed to install onnxruntime-gpu - RapidOCR will use CPU")
+            print("         GPU acceleration will not be available")
+        else:
+            print("✓ onnxruntime-gpu installed successfully")
+    
+    return success
 
 
 def verify_installation(gpu=False):
@@ -497,13 +512,13 @@ Examples:
         success = install_flash_attention() and success
         success = install_h2ovl_deps() and success
         success = install_kokoro_tts() and success
-        success = install_rapidocr() and success
+        success = install_rapidocr(use_gpu=use_gpu) and success
     else:
         # CPU installation steps
         success = install_pytorch_cpu() and success
         success = install_h2ovl_deps() and success
         success = install_kokoro_tts() and success
-        success = install_rapidocr() and success
+        success = install_rapidocr(use_gpu=use_gpu) and success
     
     if not success:
         print("\n" + "="*60)

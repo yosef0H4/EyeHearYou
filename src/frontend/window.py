@@ -53,6 +53,8 @@ class OCRWindow(QMainWindow):
             "lock_notice": "⚠️ Default profile is locked. Duplicate to edit.",
             "chk_rapid": "Use Smart Detection (RapidOCR)",
             "chk_rapid_tooltip": "Uncheck to manually select text areas",
+            "chk_gpu": "Use GPU Acceleration",
+            "chk_gpu_tooltip": "Enable GPU acceleration for RapidOCR (requires onnxruntime-gpu, ~27% faster)",
             "btn_tool_none": "✋ View",
             "btn_tool_add": "➕ Add Area",
             "btn_tool_sub": "➖ Remove Area",
@@ -120,6 +122,8 @@ class OCRWindow(QMainWindow):
             "lock_notice": "⚠️ ملف التعريف الافتراضي مقفل. انسخه للتعديل.",
             "chk_rapid": "استخدام الكشف الذكي (RapidOCR)",
             "chk_rapid_tooltip": "قم بإلغاء التحديد لتحديد مناطق النص يدوياً",
+            "chk_gpu": "استخدام تسريع GPU",
+            "chk_gpu_tooltip": "تفعيل تسريع GPU لـ RapidOCR (يتطلب onnxruntime-gpu، أسرع بنسبة ~27%)",
             "btn_tool_none": "✋ عرض",
             "btn_tool_add": "➕ إضافة منطقة",
             "btn_tool_sub": "➖ إزالة منطقة",
@@ -1010,6 +1014,33 @@ class OCRWindow(QMainWindow):
         self.detection_info_label.setStyleSheet("color: #4CAF50; font-size: 9px; font-style: italic; padding: 3px;")
         g_layout.addWidget(self.detection_info_label)
         
+        # GPU Acceleration Checkbox
+        gpu_row = QHBoxLayout()
+        self.chk_gpu = QCheckBox(self.TRANSLATIONS[self.ui_lang]["chk_gpu"])
+        gpu_val = td_config.get("use_gpu", False)
+        self.chk_gpu.setChecked(gpu_val)
+        self.chk_gpu.setToolTip(self.TRANSLATIONS[self.ui_lang]["chk_gpu_tooltip"])
+        
+        def on_gpu_toggled(checked):
+            if "text_detection" not in self.config:
+                self.config["text_detection"] = {}
+            self.config["text_detection"]["use_gpu"] = checked
+            self.save_and_refresh()
+            # Force reinitialization of RapidOCR with new GPU setting
+            from src.backend.core.detection import _rapidocr_instance, _rapidocr_use_gpu
+            import src.backend.core.detection as detection_module
+            detection_module._rapidocr_instance = None
+            detection_module._rapidocr_use_gpu = None
+        
+        self.chk_gpu.toggled.connect(on_gpu_toggled)
+        gpu_row.addWidget(self.chk_gpu)
+        gpu_row.addStretch()
+        g_layout.addLayout(gpu_row)
+        g_layout.addSpacing(5)
+        
+        # Store reference for profile refresh
+        self._config_widgets["text_detection.use_gpu"] = (None, None, self.chk_gpu)
+        
         def update_viz_detection():
             # For visualization, estimate pixels from ratios (assume 1920x1080 screen)
             # This is just for the visualizer widget, actual filtering uses ratios
@@ -1610,6 +1641,16 @@ class OCRWindow(QMainWindow):
         
         # Update text_detection widgets
         td_config = self.config.get("text_detection", {})
+        
+        # Update GPU checkbox
+        if "text_detection.use_gpu" in self._config_widgets:
+            _, _, checkbox = self._config_widgets["text_detection.use_gpu"]
+            if checkbox:
+                gpu_val = td_config.get("use_gpu", False)
+                checkbox.blockSignals(True)
+                checkbox.setChecked(gpu_val)
+                checkbox.blockSignals(False)
+        
         for key in ["min_height_ratio", "median_height_fraction", "merge_vertical_ratio", 
                     "merge_horizontal_ratio", "merge_width_ratio_threshold"]:
             widget_key = f"text_detection.{key}"
@@ -2567,6 +2608,9 @@ class OCRWindow(QMainWindow):
         if hasattr(self, 'chk_rapid'):
             self.chk_rapid.setText(t["chk_rapid"])
             self.chk_rapid.setToolTip(t["chk_rapid_tooltip"])
+        if hasattr(self, 'chk_gpu'):
+            self.chk_gpu.setText(t["chk_gpu"])
+            self.chk_gpu.setToolTip(t["chk_gpu_tooltip"])
         if hasattr(self, 'btn_tool_none'):
             self.btn_tool_none.setText(t["btn_tool_none"])
         if hasattr(self, 'btn_tool_add'):

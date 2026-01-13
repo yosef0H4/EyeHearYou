@@ -37,13 +37,15 @@ dependencies = [
 # Do NOT upgrade packages without testing thoroughly.
 #
 # Note: RapidOCR is used for text detection instead of PaddleOCR to avoid
-# conflicts with PyTorch. RapidOCR uses ONNX Runtime which runs on CPU and
-# doesn't interfere with PyTorch installations.
+# conflicts with PyTorch. RapidOCR uses ONNX Runtime which can run on CPU or GPU.
 #
 # Installation:
 #   uv pip install rapidocr-onnxruntime
+#   uv pip install onnxruntime-gpu  # Optional: For GPU acceleration (requires CUDA)
 #
-# RapidOCR runs on CPU via ONNX Runtime and doesn't require GPU or CUDA.
+# RapidOCR can run on CPU (default) or GPU (if onnxruntime-gpu is installed).
+# GPU acceleration provides ~27% faster detection. The install.py script will
+# automatically install onnxruntime-gpu if a GPU is detected.
 # It's lightweight and doesn't conflict with PyTorch dependencies.
 #
 # The application gracefully handles missing RapidOCR - it will process the full

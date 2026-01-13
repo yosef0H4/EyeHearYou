@@ -10,13 +10,54 @@ from .task_manager import task_manager
 
 # Global RapidOCR instance (lazy initialization)
 _rapidocr_instance = None
+_rapidocr_use_gpu = None
 
 
-def _get_rapidocr_instance():
-    """Get or create RapidOCR instance (singleton pattern)"""
-    global _rapidocr_instance
-    if _rapidocr_instance is None:
-        _rapidocr_instance = RapidOCR()
+def _get_rapidocr_instance(use_gpu=None):
+    """Get or create RapidOCR instance (singleton pattern)
+    
+    Args:
+        use_gpu: If True, use GPU (CUDAExecutionProvider). If None, check config.
+    """
+    global _rapidocr_instance, _rapidocr_use_gpu
+    
+    # Determine GPU usage
+    if use_gpu is None:
+        # Check config for GPU setting
+        from src.backend.core.config import load_config
+        config = load_config()
+        td_config = config.get("text_detection", {})
+        use_gpu = td_config.get("use_gpu", False)
+    
+    # Reinitialize if GPU setting changed
+    if _rapidocr_instance is None or _rapidocr_use_gpu != use_gpu:
+        _rapidocr_use_gpu = use_gpu
+        
+        if use_gpu:
+            # Check if GPU is available
+            try:
+                import onnxruntime as ort
+                available_providers = ort.get_available_providers()
+                if 'CUDAExecutionProvider' in available_providers:
+                    print("[RapidOCR] Initializing with GPU support (CUDAExecutionProvider)...")
+                    # RapidOCR-onnxruntime should automatically use CUDA if onnxruntime-gpu is installed
+                    # We can try passing providers via kwargs
+                    try:
+                        _rapidocr_instance = RapidOCR(providers=['CUDAExecutionProvider', 'CPUExecutionProvider'])
+                    except TypeError:
+                        # If providers kwarg not supported, try default (should auto-detect GPU)
+                        _rapidocr_instance = RapidOCR()
+                        print("[RapidOCR] Using default initialization (should auto-detect GPU)")
+                else:
+                    print("[RapidOCR] GPU requested but CUDAExecutionProvider not available, using CPU")
+                    _rapidocr_instance = RapidOCR()
+            except ImportError:
+                print("[RapidOCR] onnxruntime-gpu not available, using CPU")
+                _rapidocr_instance = RapidOCR()
+        else:
+            print("[RapidOCR] Initializing with CPU (use_gpu=False)...")
+            _rapidocr_instance = RapidOCR()
+    
     return _rapidocr_instance
 
 
@@ -77,10 +118,17 @@ def detect_text_regions(image, min_width_ratio=0.0, min_height_ratio=0.0, median
     if task_manager.is_cancelled():
         return None
     
-    print("Using RapidOCR for text detection (CPU via ONNX Runtime)...")
+    # Check config for GPU setting
+    from src.backend.core.config import load_config
+    config = load_config()
+    td_config = config.get("text_detection", {})
+    use_gpu = td_config.get("use_gpu", False)
+    
+    device_str = "GPU" if use_gpu else "CPU"
+    print(f"Using RapidOCR for text detection ({device_str} via ONNX Runtime)...")
     
     # Get RapidOCR instance
-    ocr = _get_rapidocr_instance()
+    ocr = _get_rapidocr_instance(use_gpu=use_gpu)
     
     # Convert PIL Image to numpy array
     img_array = np.array(image)
@@ -158,10 +206,17 @@ def detect_text_regions_unfiltered(image, config=None, use_cache=True):
             print(f"Using cached raw detections ({len(cached)} regions)")
             return cached
     
-    print("Using RapidOCR for text detection (CPU via ONNX Runtime)...")
+    # Check config for GPU setting
+    from src.backend.core.config import load_config
+    config = load_config()
+    td_config = config.get("text_detection", {})
+    use_gpu = td_config.get("use_gpu", False)
+    
+    device_str = "GPU" if use_gpu else "CPU"
+    print(f"Using RapidOCR for text detection ({device_str} via ONNX Runtime)...")
     
     # Get RapidOCR instance
-    ocr = _get_rapidocr_instance()
+    ocr = _get_rapidocr_instance(use_gpu=use_gpu)
     
     # Convert PIL Image to numpy array
     img_array = np.array(image)

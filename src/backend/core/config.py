@@ -33,7 +33,8 @@ FACTORY_DEFAULT = {
         "median_height_fraction": 1.0,   # Discard if < 100% of median text size (less aggressive noise filtering)
         "merge_vertical_ratio": 0.07,     # Merge lines if gap < 0.07x text height (tight vertical merging)
         "merge_horizontal_ratio": 0.37,  # Merge words if gap < 0.37x text height (tight horizontal merging)
-        "merge_width_ratio_threshold": 0.75  # Minimum horizontal overlap for vertical merging
+        "merge_width_ratio_threshold": 0.75,  # Minimum horizontal overlap for vertical merging
+        "use_gpu": False  # Use GPU acceleration for RapidOCR (requires onnxruntime-gpu)
     },
     "text_sorting": {
         "direction": "horizontal_ltr",  # Options: horizontal_ltr, horizontal_rtl, vertical_ltr, vertical_rtl
@@ -112,6 +113,25 @@ def load_config():
 
 def _validate_and_migrate_config(config):
     """Validate and migrate config to ensure all required fields exist"""
+    # Auto-detect GPU for use_gpu on first run (if not already set)
+    if "text_detection" in config:
+        td = config["text_detection"]
+        if "use_gpu" not in td:
+            # First run - auto-detect GPU availability
+            try:
+                import onnxruntime as ort
+                available_providers = ort.get_available_providers()
+                has_cuda = 'CUDAExecutionProvider' in available_providers
+                td["use_gpu"] = has_cuda
+                if has_cuda:
+                    print("[Config] GPU detected - enabling GPU acceleration for RapidOCR by default")
+                else:
+                    print("[Config] No GPU detected - using CPU for RapidOCR")
+            except ImportError:
+                # onnxruntime-gpu not installed
+                td["use_gpu"] = False
+                print("[Config] onnxruntime-gpu not installed - using CPU for RapidOCR")
+    
     # Ensure TTS config exists
     if "tts" not in config:
         config["tts"] = FACTORY_DEFAULT["tts"].copy()
