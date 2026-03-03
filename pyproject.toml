@@ -11,6 +11,7 @@ dependencies = [
     "pillow==12.1.0",
     "mss==10.0.0",
     "rapidocr-onnxruntime==1.4.4",
+    "onnxruntime>=1.19.0,<1.20.0",  # Pinned for Windows DLL + NumPy 2.x compatibility
     "pygetwindow==0.0.9",
     "pyqt6==6.10.2",
     "streamlit==1.52.2",
